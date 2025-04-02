@@ -1,6 +1,5 @@
 #!/bin/sh
 # Created by daniel.munoz@global.ntt
-# Added line
 # Please check below link for more info:
 if [ "$#" -lt 2 ]; then
 	echo "Usage $0 <HANA SYSTEM SID> <HANA TENANT SID>"
