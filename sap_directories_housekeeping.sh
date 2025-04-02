@@ -8,15 +8,19 @@ exec >> /tmp/sap_directories_housekeeping_$current_date.log 2>&1
 
 ##### Editable variables
 
-# retention_months set the desired months to be retained
-retention_months=24
+# Different variables
+# keep_months: The script will delete anything older
+# zip_months: The script will zip anything newer than keep_monhts and older than zip_months
+keep_days=1825
+zip_days=730
+
 
 
 # Array declaration for the file patterns to cleanup, You can edit by extending the patterns:
 file_pattern_array=( OO* *.ARCHIVE FBI* gw_log* *.trc *.old.* *.old dev_* )
 
 # Variables transformation
-retention_days=$((retention_months * 31))
+
 
 
 ## Initialize an array with unique SAP SIDs
@@ -52,8 +56,12 @@ else
 fi
 echo "$(date): SAP SIDs to analyze: ${sid_array[@]}"
 echo "$(date): The following file patterns will be used: ${file_pattern_array[@]}"
-echo "$(date): Files older than $retention_days days will be deleted"
+echo "$(date): Files older than $keep_days days will be deleted"
+echo "$(date): Files older than $zip_days and newer than $keep_days will be zipped"
+echo "$(date): Files newer than $zip_days will not be touched"
 
+
+#delete loop
 for sap_sid in ${sid_array[@]}
 do
         # You can edit this paths by adding new ones
@@ -73,15 +81,52 @@ do
                                         #echo -e "$(date): Working on directory: $dir"
                                         for pattern in ${file_pattern_array[@]}
                                         do
-                                                files=$(find -L $dir -maxdepth 1 -name "$pattern" -mtime +$retention_days -type f)
-                                                if [ -n "$files" ]; then
+                                                files_to_delete=$(find -L $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f)
+                                                if [ -n "$files_to_delete" ]; then
                                                         if [ "$1" != "execute" ]; then
                                                                 echo -e "$(date): The following files would be deleted on directory: $dir for pattern: $pattern if not in test mode, only listing..."
-                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$retention_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
+                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn |tail -10
                                                         else
                                                                 echo -e "$(date): The following files will be deleted on directory: $dir for pattern: $pattern"
-                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$retention_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
+                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn|tail -10
                                                                 echo -e "$(date): Deleting the files..."
+                                                                #find -L $dir -maxdepth 1 -name "$pattern" -mtime +$retention_days -type f -deleteX
+                                                        fi
+                                                fi
+                                        done
+                        fi
+        done
+done
+
+#zip loop
+for sap_sid in ${sid_array[@]}
+do
+        # You can edit this paths by adding new ones
+        global=/usr/sap/$sap_sid/SYS/global
+        work_ascs=/usr/sap/$sap_sid/ASCS[0-9][0-9]/work
+        work_scs=/usr/sap/$sap_sid/SCS[0-9][0-9]/work
+        work_ci=/usr/sap/$sap_sid/DVEBMGS[0-9][0-9]/work
+        work_dia=/usr/sap/$sap_sid/D[0-9][0-9]/work
+        work_java=/usr/sap/$sap_sid/J[0-9][0-9]/work
+
+        paths_array=( $global $work_ascs $work_scs $work_ci $work_dia $work_java )
+
+        # Loop for every directory
+        for dir in ${paths_array[@]}
+        do
+                        if [ -d "$dir" ];then
+                                        #echo -e "$(date): Working on directory: $dir"
+                                        for pattern in ${file_pattern_array[@]}
+                                        do
+                                                files_to_zip=$(find -L $dir -maxdepth 1 -name "$pattern" -mtime +$zip_days -mtime -$keep_days -type f)
+                                                if [ -n "$files_to_zip" ]; then
+                                                        if [ "$1" != "execute" ]; then
+                                                                echo -e "$(date): The following files would be zipped on directory: $dir for pattern: $pattern if not in test mode, only listing..."
+                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$zip_days -mtime -$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn|tail -10                                                                
+                                                        else
+                                                                echo -e "$(date): The following files will be zipped on directory: $dir for pattern: $pattern"
+                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$zip_days -mtime -$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn|tail -10
+                                                                echo -e "$(date): Zipping files..."
                                                                 #find -L $dir -maxdepth 1 -name "$pattern" -mtime +$retention_days -type f -deleteX
                                                         fi
                                                 fi
