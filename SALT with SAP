@@ -20,7 +20,6 @@ salt -L 'HOST007.domain.net,HOST038.domain.net' cmd.run "su - \`grep -m 1 '.*s2a
 ==========> JAVA Versions
 ====================================
 
-OSS message Case 533116/2024 (P4) - Netweaver JAVA Information about Product Instances at database level
 --> Tables BC_SL_PRDVERS, BC_SL_SWFEATURE, BC_SL_SWFEATUREINC
 select * from BC_COMPVERS
 select SCNAME, SAPRELEASE, SERVICELEVEL,PATCHLEVEL from BC_COMPVERS where COMPONENTTYPE = 'SC'
