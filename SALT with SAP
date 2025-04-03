@@ -53,7 +53,7 @@ salt -L 'HOST007.domain.net,HOST038.domain.net' cmd.run "su - \`grep -m 1 '.*s2a
 
 
 ℹ️ List unique SAP admin users in HOST
-grep adm /usr/sap/sapservices  |awk '{print $NF}'|egrep -v 'd[a-z][a-z]'|uniq
+grep adm /usr/sap/sapservices |grep -v SMD |awk '{print $NF}'|uniq
 
 
 ===================================
