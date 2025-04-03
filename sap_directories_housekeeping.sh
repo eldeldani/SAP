@@ -76,8 +76,8 @@ do
         for dir in ${paths_array[@]}
         do
             if [ -d "$dir" ];then
-                echo -e "$(date): Directory $dir "
-                echo -e "$(date): Current filesystem usage `df -h $dir|tail -1`"
+                echo -e "$(date): Directory $dir " >> /tmp/before_fs_usage
+                echo -e "$(date): Current filesystem usage `df -h $dir|tail -1`" >> >> /tmp/before_fs_usage
             fi
         done
 done
@@ -188,8 +188,17 @@ do
         for dir in ${paths_array[@]}
         do
             if [ -d "$dir" ];then
-                echo -e "$(date): Directory $dir "
-                echo -e "$(date): Current filesystem usage `df -h $dir|tail -1`"
+                echo -e "$(date): Directory $dir " >> /tmp/after_fs_usage
+                echo -e "$(date): Current filesystem usage `df -h $dir|tail -1`" >> /tmp/after_fs_usage
             fi
         done
 done
+
+#Show Filesystem usage befor and after
+echo -e "$(date): Filesystem usage before script"
+cat /tmp/before_fs_usage
+echo -e "$(date): Filesystem usage after script"
+/tmp/after_fs_usage
+
+#cleanup temporary files
+rm /tmp/before_fs_usage /tmp/after_fs_usage
