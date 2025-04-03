@@ -74,6 +74,7 @@ fi
 df -h |grep sap >> /tmp/before_fs_usage
 
 #delete loop
+files_to_delete_found="no"
 for sap_sid in ${sid_array[@]}
 do
         # You can edit this paths by adding new ones
@@ -93,26 +94,31 @@ do
             #echo -e "$(date): Working on directory: $dir"
                 for pattern in ${file_pattern_array[@]}
                     do
-                        files_to_delete=$(find -L $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f)
+                        files_to_delete=$(find $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f)
                         if [ -n "$files_to_delete" ]; then
-                            if [ "$1" != "execute" ]; then
-                                echo -e "$(date): The following files would be deleted on directory: $dir for pattern: $pattern if not in test mode, only listing..."
-                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
-                            else
-                                echo -e "$(date): The following files will be deleted on directory: $dir for pattern: $pattern"
-                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
-                                echo -e "$(date): Deleting the files..."
-                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -dddelete
-                                if ! [[ $? -eq 0 ]]; then
-                                    echo -e "$(date): Error when deleting files"
-                                    overall_exit_status=1
-                                fi
-                            fi
-                        fi                                                
+				files_to_delete_found="yes"
+				if [ "$1" != "execute" ]; then
+                                	echo -e "$(date): The following files would be deleted on directory: $dir for pattern: $pattern if not in test mode, only listing..."
+                                	find $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
+                            	else
+                                	echo -e "$(date): The following files will be deleted on directory: $dir for pattern: $pattern"
+                                	find $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
+                                	echo -e "$(date): Deleting the files..."
+                                	find $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -dddelete
+                                	if ! [[ $? -eq 0 ]]; then
+	                                    	echo -e "$(date): Error when deleting files"
+	                                    	overall_exit_status=1
+                                	fi
+                            	fi	
+				fi
                     done
             fi
         done
 done
+if [[ "$files_to_delete_found" = "no" ]]; then
+	echo -e "$(date): No files found for deletion"
+fi
+
 
 #zip loop
 for sap_sid in ${sid_array[@]}
@@ -134,32 +140,32 @@ do
                                         #echo -e "$(date): Working on directory: $dir"
                                         for pattern in ${file_pattern_array[@]}
                                         do
-                                                files_to_zip=$(find -L $dir -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f)
+                                                files_to_zip=$(find $dir -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f)
                                                 if [ -n "$files_to_zip" ]; then
                                                         if [ "$1" != "execute" ]; then
                                                                 echo -e "$(date): The following files would be zipped on directory: $dir for pattern: $pattern if not in test mode, only listing..."
-                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$zip_days -mtime -$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn                                                              
+                                                                find $dir -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn                                                              
                                                         else
                                                                 echo -e "$(date): The following files will be zipped on directory: $dir for pattern: $pattern"
-                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$zip_days -mtime -$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
+                                                                find $dir -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
                                                                 echo -e "$(date): Zipping files..."                                                                
                                                                 case $COMPRESS_TOOL in
                                                                 gzip)
-                                                                    find -L $dir -maxdepth 1 -name "$pattern" -mtime +$zip_days -mtime -$keep_days -type f -exec gzip {} \;
+                                                                    find $dir -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f -exec gzip {} \;
                                                                     if ! [[ $? -eq 0 ]]; then
                                                                         echo -e "$(date): Error when zipping files"
 				                                                        overall_exit_status=1
                                                                     fi
                                                                     ;;
                                                                 bzip2)
-                                                                    find -L $dir -maxdepth 1 -name "$pattern" -mtime +$zip_days -mtime -$keep_days -type f -exec bzip2 {} \;
+                                                                    find $dir -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f -exec bzip2 {} \;
                                                                     if ! [[ $? -eq 0 ]]; then
                                                                         echo -e "$(date): Error when zipping files"
 				                                                        overall_exit_status=1
                                                                     fi
                                                                     ;;
                                                                 xz)
-                                                                    find -L $dir -maxdepth 1 -name "$pattern" -mtime +$zip_days -mtime -$keep_days -type f -exec xz {} \;
+                                                                    find $dir -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f -exec xz {} \;
                                                                     if ! [[ $? -eq 0 ]]; then
                                                                         echo -e "$(date): Error when zipping files"
 				                                                        overall_exit_status=1
