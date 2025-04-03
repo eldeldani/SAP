@@ -60,27 +60,7 @@ echo "$(date): Files newer than $zip_days will not be touched"
 
 
 #Before filesystem usage loop
-for sap_sid in ${sid_array[@]}
-do
-        # You can edit this paths by adding new ones
-        global=/usr/sap/$sap_sid/SYS/global
-        work_ascs=/usr/sap/$sap_sid/ASCS[0-9][0-9]/work
-        work_scs=/usr/sap/$sap_sid/SCS[0-9][0-9]/work
-        work_ci=/usr/sap/$sap_sid/DVEBMGS[0-9][0-9]/work
-        work_dia=/usr/sap/$sap_sid/D[0-9][0-9]/work
-        work_java=/usr/sap/$sap_sid/J[0-9][0-9]/work
-
-        paths_array=( $global $work_ascs $work_scs $work_ci $work_dia $work_java )
-
-        # Loop for every directory
-        for dir in ${paths_array[@]}
-        do
-            if [ -d "$dir" ];then
-                echo -e "$(date): Directory $dir " >> /tmp/before_fs_usage
-                echo -e "$(date): Current filesystem usage `df -h $dir|tail -1`" >> /tmp/before_fs_usage
-            fi
-        done
-done
+df -h |grep /usr/sap/ > /tmp/before_fs_usage
 
 #delete loop
 for sap_sid in ${sid_array[@]}
@@ -172,33 +152,13 @@ do
 done
 
 # After filesystem usage loop
-for sap_sid in ${sid_array[@]}
-do
-        # You can edit this paths by adding new ones
-        global=/usr/sap/$sap_sid/SYS/global
-        work_ascs=/usr/sap/$sap_sid/ASCS[0-9][0-9]/work
-        work_scs=/usr/sap/$sap_sid/SCS[0-9][0-9]/work
-        work_ci=/usr/sap/$sap_sid/DVEBMGS[0-9][0-9]/work
-        work_dia=/usr/sap/$sap_sid/D[0-9][0-9]/work
-        work_java=/usr/sap/$sap_sid/J[0-9][0-9]/work
-
-        paths_array=( $global $work_ascs $work_scs $work_ci $work_dia $work_java )
-
-        # Loop for every directory
-        for dir in ${paths_array[@]}
-        do
-            if [ -d "$dir" ];then
-                echo -e "$(date): Directory $dir " >> /tmp/after_fs_usage
-                echo -e "$(date): Current filesystem usage `df -h $dir|tail -1`" >> /tmp/after_fs_usage
-            fi
-        done
-done
+df -h |grep /usr/sap/ > /tmp/after_fs_usage
 
 #Show Filesystem usage befor and after
-echo -e "$(date): Filesystem usage before script"
+echo -e "$(date): Filesystem usage before script:"
 cat /tmp/before_fs_usage
-echo -e "$(date): Filesystem usage after script"
-/tmp/after_fs_usage
+echo -e "$(date): Filesystem usage after script:"
+cat /tmp/after_fs_usage
 
 #cleanup temporary files
 rm /tmp/before_fs_usage /tmp/after_fs_usage
