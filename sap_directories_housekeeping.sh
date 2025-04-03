@@ -77,7 +77,7 @@ do
         do
             if [ -d "$dir" ];then
                 echo -e "$(date): Directory $dir " >> /tmp/before_fs_usage
-                echo -e "$(date): Current filesystem usage `df -h $dir|tail -1`" >> >> /tmp/before_fs_usage
+                echo -e "$(date): Current filesystem usage `df -h $dir|tail -1`" >> /tmp/before_fs_usage
             fi
         done
 done
