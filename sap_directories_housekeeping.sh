@@ -1,7 +1,7 @@
 #!/bin/bash
 
-##### Script output
-
+# Exit code
+exit_code=0
 # Redirect everything to log file
 current_date=$(date +%Y-%m-%d)
 exec >> /tmp/sap_directories_housekeeping_$current_date.log 2>&1
@@ -13,7 +13,6 @@ exec >> /tmp/sap_directories_housekeeping_$current_date.log 2>&1
 # zip_days: The script will zip anything newer than keep_days and older than zip_days
 keep_days=1825
 zip_days=730
-
 
 # Array declaration for the file patterns to cleanup, You can edit by extending the patterns:
 # i.e.: You wan to add the pattern *.gz you would append it to the end
@@ -60,7 +59,7 @@ echo "$(date): Files newer than $zip_days will not be touched"
 
 
 #Before filesystem usage loop
-df -h |grep /usr/sap/ > /tmp/before_fs_usage
+df -h |grep sap >> /tmp/before_fs_usage
 
 #delete loop
 for sap_sid in ${sid_array[@]}
@@ -91,7 +90,7 @@ do
                                                                 echo -e "$(date): The following files will be deleted on directory: $dir for pattern: $pattern"
                                                                 find -L $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
                                                                 echo -e "$(date): Deleting the files..."
-                                                                #find -L $dir -maxdepth 1 -name "$pattern" -mtime +$retention_days -type f -deleteX
+                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -delete
                                                         fi
                                                 fi                                                
                                         done
@@ -106,7 +105,7 @@ do
                                                                 echo -e "$(date): The following zipped files will be deleted on directory: $dir"
                                                                 find -L $dir -maxdepth 1 -name "*.gz" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
                                                                 echo -e "$(date): Deleting the zipped filesfiles..."
-                                                                #find -L $dir -maxdepth 1 -name "$pattern" -mtime +$retention_days -type f -deleteX
+                                                                find -L $dir -maxdepth 1 -name "*.gz" -mtime +$keep_days -type f -delete
                                                         fi
                                                 fi 
                                         done
@@ -143,7 +142,7 @@ do
                                                                 echo -e "$(date): The following files will be zipped on directory: $dir for pattern: $pattern"
                                                                 find -L $dir -maxdepth 1 -name "$pattern" -mtime +$zip_days -mtime -$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
                                                                 echo -e "$(date): Zipping files..."
-                                                                #find -L $dir -maxdepth 1 -name "$pattern" -mtime +$retention_days -type f -deleteX
+                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$zip_days -mtime -$keep_days -type f gzip -9 {} \;
                                                         fi
                                                 fi
                                         done
@@ -152,7 +151,7 @@ do
 done
 
 # After filesystem usage loop
-df -h |grep /usr/sap/ > /tmp/after_fs_usage
+df -h |grep sap >> /tmp/after_fs_usage
 
 #Show Filesystem usage befor and after
 echo -e "$(date): Filesystem usage before script:"
