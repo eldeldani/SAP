@@ -2,25 +2,23 @@
 
 ##### Script output
 
-# Redirect output and errors to output.log
+# Redirect everything to log file
 current_date=$(date +%Y-%m-%d)
 exec >> /tmp/sap_directories_housekeeping_$current_date.log 2>&1
 
 ##### Editable variables
 
 # Different variables
-# keep_months: The script will delete anything older
-# zip_months: The script will zip anything newer than keep_monhts and older than zip_months
+# keep_days: The script will delete anything older than keep_days
+# zip_days: The script will zip anything newer than keep_days and older than zip_days
 keep_days=1825
 zip_days=730
 
 
-
 # Array declaration for the file patterns to cleanup, You can edit by extending the patterns:
+# i.e.: You wan to add the pattern *.gz you would append it to the end
+# file_pattern_array=( OO* *.ARCHIVE FBI* gw_log* *.trc *.old.* *.old dev_* *.gz)
 file_pattern_array=( OO* *.ARCHIVE FBI* gw_log* *.trc *.old.* *.old dev_* )
-
-# Variables transformation
-
 
 
 ## Initialize an array with unique SAP SIDs
@@ -92,8 +90,7 @@ do
                                                                 echo -e "$(date): Deleting the files..."
                                                                 #find -L $dir -maxdepth 1 -name "$pattern" -mtime +$retention_days -type f -deleteX
                                                         fi
-                                                fi
-                                                
+                                                fi                                                
                                         done
                                         do
                                            zip_files_to_delete=$(find -L $dir -maxdepth 1 -name "*.gz" -mtime +$keep_days -type f)
