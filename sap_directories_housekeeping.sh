@@ -93,6 +93,21 @@ do
                                                                 #find -L $dir -maxdepth 1 -name "$pattern" -mtime +$retention_days -type f -deleteX
                                                         fi
                                                 fi
+                                                
+                                        done
+                                        do
+                                           zip_files_to_delete=$(find -L $dir -maxdepth 1 -name "*.gz" -mtime +$keep_days -type f)
+                                            if [ -n "$zip_files_to_delete" ]; then
+                                                    if [ "$1" != "execute" ]; then
+                                                                echo -e "$(date): The following zipped files would be deleted on directory: $dir  if not in test mode, only listing..."
+                                                                find -L $dir -maxdepth 1 -name "*.gz" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn |tail -10
+                                                        else
+                                                                echo -e "$(date): The following zipped files will be deleted on directory: $dir"
+                                                                find -L $dir -maxdepth 1 -name "*.gz" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn|tail -10
+                                                                echo -e "$(date): Deleting the zipped filesfiles..."
+                                                                #find -L $dir -maxdepth 1 -name "$pattern" -mtime +$retention_days -type f -deleteX
+                                                        fi
+                                                fi 
                                         done
                         fi
         done
