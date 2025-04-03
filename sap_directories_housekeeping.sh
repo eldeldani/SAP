@@ -92,6 +92,7 @@ do
                                                         fi
                                                 fi                                                
                                         done
+                                        for pattern in ${file_pattern_array[@]}
                                         do
                                            zip_files_to_delete=$(find -L $dir -maxdepth 1 -name "*.gz" -mtime +$keep_days -type f)
                                             if [ -n "$zip_files_to_delete" ]; then
