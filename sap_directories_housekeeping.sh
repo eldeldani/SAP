@@ -83,10 +83,10 @@ do
                                                 if [ -n "$files_to_delete" ]; then
                                                         if [ "$1" != "execute" ]; then
                                                                 echo -e "$(date): The following files would be deleted on directory: $dir for pattern: $pattern if not in test mode, only listing..."
-                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn |tail -10
+                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
                                                         else
                                                                 echo -e "$(date): The following files will be deleted on directory: $dir for pattern: $pattern"
-                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn|tail -10
+                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
                                                                 echo -e "$(date): Deleting the files..."
                                                                 #find -L $dir -maxdepth 1 -name "$pattern" -mtime +$retention_days -type f -deleteX
                                                         fi
@@ -98,10 +98,10 @@ do
                                             if [ -n "$zip_files_to_delete" ]; then
                                                     if [ "$1" != "execute" ]; then
                                                                 echo -e "$(date): The following zipped files would be deleted on directory: $dir  if not in test mode, only listing..."
-                                                                find -L $dir -maxdepth 1 -name "*.gz" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn |tail -10
+                                                                find -L $dir -maxdepth 1 -name "*.gz" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
                                                         else
                                                                 echo -e "$(date): The following zipped files will be deleted on directory: $dir"
-                                                                find -L $dir -maxdepth 1 -name "*.gz" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn|tail -10
+                                                                find -L $dir -maxdepth 1 -name "*.gz" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
                                                                 echo -e "$(date): Deleting the zipped filesfiles..."
                                                                 #find -L $dir -maxdepth 1 -name "$pattern" -mtime +$retention_days -type f -deleteX
                                                         fi
@@ -135,10 +135,10 @@ do
                                                 if [ -n "$files_to_zip" ]; then
                                                         if [ "$1" != "execute" ]; then
                                                                 echo -e "$(date): The following files would be zipped on directory: $dir for pattern: $pattern if not in test mode, only listing..."
-                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$zip_days -mtime -$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn|tail -10                                                                
+                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$zip_days -mtime -$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn                                                              
                                                         else
                                                                 echo -e "$(date): The following files will be zipped on directory: $dir for pattern: $pattern"
-                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$zip_days -mtime -$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn|tail -10
+                                                                find -L $dir -maxdepth 1 -name "$pattern" -mtime +$zip_days -mtime -$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
                                                                 echo -e "$(date): Zipping files..."
                                                                 #find -L $dir -maxdepth 1 -name "$pattern" -mtime +$retention_days -type f -deleteX
                                                         fi
