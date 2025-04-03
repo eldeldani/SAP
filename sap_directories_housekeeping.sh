@@ -59,6 +59,29 @@ echo "$(date): Files older than $zip_days and newer than $keep_days will be zipp
 echo "$(date): Files newer than $zip_days will not be touched"
 
 
+#Before filesystem usage loop
+for sap_sid in ${sid_array[@]}
+do
+        # You can edit this paths by adding new ones
+        global=/usr/sap/$sap_sid/SYS/global
+        work_ascs=/usr/sap/$sap_sid/ASCS[0-9][0-9]/work
+        work_scs=/usr/sap/$sap_sid/SCS[0-9][0-9]/work
+        work_ci=/usr/sap/$sap_sid/DVEBMGS[0-9][0-9]/work
+        work_dia=/usr/sap/$sap_sid/D[0-9][0-9]/work
+        work_java=/usr/sap/$sap_sid/J[0-9][0-9]/work
+
+        paths_array=( $global $work_ascs $work_scs $work_ci $work_dia $work_java )
+
+        # Loop for every directory
+        for dir in ${paths_array[@]}
+        do
+            if [ -d "$dir" ];then
+                echo -e "$(date): Directory $dir "
+                echo -e "$(date): Current filesystem usage `df -h $dir|tail -1`"
+            fi
+        done
+done
+
 #delete loop
 for sap_sid in ${sid_array[@]}
 do
@@ -145,5 +168,28 @@ do
                                                 fi
                                         done
                         fi
+        done
+done
+
+# After filesystem usage loop
+for sap_sid in ${sid_array[@]}
+do
+        # You can edit this paths by adding new ones
+        global=/usr/sap/$sap_sid/SYS/global
+        work_ascs=/usr/sap/$sap_sid/ASCS[0-9][0-9]/work
+        work_scs=/usr/sap/$sap_sid/SCS[0-9][0-9]/work
+        work_ci=/usr/sap/$sap_sid/DVEBMGS[0-9][0-9]/work
+        work_dia=/usr/sap/$sap_sid/D[0-9][0-9]/work
+        work_java=/usr/sap/$sap_sid/J[0-9][0-9]/work
+
+        paths_array=( $global $work_ascs $work_scs $work_ci $work_dia $work_java )
+
+        # Loop for every directory
+        for dir in ${paths_array[@]}
+        do
+            if [ -d "$dir" ];then
+                echo -e "$(date): Directory $dir "
+                echo -e "$(date): Current filesystem usage `df -h $dir|tail -1`"
+            fi
         done
 done
