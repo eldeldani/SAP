@@ -20,7 +20,7 @@ declare -a sap_instances_array
 while IFS= read -r line; do
     # Use a regular expression to extract the required part
     # if [[ $line =~ (\/usr\/sap\/)([a-zA-Z0-9]{3})*([a-zA-Z0-9]{3,5})_(D|DVEBMGS|ASCS|SCS|J|SMDA)([0-9]{2})_([a-zA-Z0-9]{1,13}) ]]; then
-    if [[ $line =~ /usr/sap/([a-zA-Z0-9]{3})/SYS/profile/([a-zA-Z0-9]{3,5})_(D|DVEBMGS|ASCS|SCS|J|SMDA|HDB|TRX)([0-9]{2})_([a-zA-Z0-9]{1,13}) ]]; then
+    if [[ $line =~ /usr/sap/([a-zA-Z0-9]{3})/SYS/profile/([a-zA-Z0-9]{3,5})_(D|DVEBMGS|ASCS|SCS|J|SMDA|HDB)([0-9]{2})_([a-zA-Z0-9]{1,13}) ]]; then
         SID=${BASH_REMATCH[1]}
         PROFSTRT=${BASH_REMATCH[2]}
         INSTANCE_TYPE=${BASH_REMATCH[3]}
