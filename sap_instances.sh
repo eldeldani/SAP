@@ -128,6 +128,45 @@ function_status(){
 
 }
 
+function_kernel(){
+    length=${#sap_instances_array[@]}
+    # echo "Array length: $length"
+    for (( i=0; i<(${length}); i+=5 ));
+    do 
+        
+        echo -e "\033[1;33m${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}\033[0m"
+        # case ${sap_instances_array[$i+2]} in
+        # D)
+        #     echo "Instance Type: ${sap_instances_array[$i+2]} - Dialog Instance"
+        #     ;;
+        # DVEBMGS)
+        #     echo "Instance Type: ${sap_instances_array[$i+2]} - Central Instance"
+        #     ;;
+        # ASCS)
+        #     echo "Instance Type: ${sap_instances_array[$i+2]} - ABAP Central Services Instance"
+        #     ;;
+        # SCS)
+        #     echo "Instance Type: ${sap_instances_array[$i+2]} - JAVA Central Services Instance"
+        #     ;;
+        # J)
+        #     echo "Instance Type: ${sap_instances_array[$i+2]} - JAVA Instance"
+        #     ;;
+        # SMDA)
+        #     echo "Instance Type: ${sap_instances_array[$i+2]} - Solution Manager Diagnostics Instance"
+        #     ;;
+        # HDB)
+        #     echo "Instance Type: ${sap_instances_array[$i+2]} - HANA Platform Instance"
+        #     ;;
+        # esac
+        # echo "Instance: ${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}"
+        # echo "Hostname: ${sap_instances_array[$i+4]}"
+        # echo "SAP Instance: ${sap_instances_array[$i]}_${sap_instances_array[$i+1]}${sap_instances_array[$i+2]}_${sap_instances_array[$i+3]}"
+        sid_lower=${sap_instances_array[$i],,}
+        su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -host ${sap_instances_array[$i+4]} -function GetVersionInfo"
+        echo "=================================="
+    done
+}
+
 # Check if the number of arguments is correct
 if [ "$#" -lt 1 ]; then
     echo "Usage: $0 command options"
@@ -164,10 +203,11 @@ case $arg1 in
             exit 1
         fi
         ;;
+    kernel)
+        function_kernel
+        ;;
     *)
-        echo "Error: 'command' must be 'list', 'profiles', or 'status'."
+        echo "Error: 'command' must be 'list', 'profiles', 'status' or 'kernel'."
         exit 1
         ;;
 esac
-
-
