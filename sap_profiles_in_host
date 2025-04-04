@@ -1,4 +1,8 @@
 #!/bin/bash
+# SAP instance lookup tool for any host
+# Created by Daniel Munoz
+# Usage:
+# <TBD>
 
 # Initialize an empty array
 declare -a hostname_array
