@@ -1,4 +1,29 @@
 #!/bin/bash
+# SAP standard directories houskeeping script
+# Created by Daniel Munoz
+# Usage:
+# sap_instances.sh [execution]
+#   If executed with arguments, it will just perform analysis without any action.
+#   If executed with 'execution' argument, it will perform actions
+# The script will look in to the following directories:
+        # global=/usr/sap/$sap_sid/SYS/global
+        # work_ascs=/usr/sap/$sap_sid/ASCS[0-9][0-9]/work
+        # work_scs=/usr/sap/$sap_sid/SCS[0-9][0-9]/work
+        # work_ci=/usr/sap/$sap_sid/DVEBMGS[0-9][0-9]/work
+        # work_dia=/usr/sap/$sap_sid/D[0-9][0-9]/work
+        # work_java=/usr/sap/$sap_sid/J[0-9][0-9]/work
+    # You can extend the directory lookup by adding more paths after section "# You can edit this paths by adding new ones"
+
+# The script will look for the following file patterns/names, you can also extend the patterns
+# file_pattern_array=( OO* *.ARCHIVE FBI* gw_log* *.trc *.old.* *.old dev_* )
+# You need to define the following variables for your specific case
+# keep_days = The script will delete anything older than keep_days
+# zip_days = The script will zip anything newer than keep_days and older than zip_days
+
+# Script will produce a log on /tmp/sap_directories_housekeeping_<date>.log
+
+
+
 
 # Exit code
 overall_exit_status=0
@@ -96,8 +121,8 @@ do
                     do
                         files_to_delete=$(find $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f)
                         if [ -n "$files_to_delete" ]; then
-				files_to_delete_found="yes"
-				if [ "$1" != "execute" ]; then
+				            files_to_delete_found="yes"
+				                if [ "$1" != "execute" ]; then
                                 	echo -e "$(date): The following files would be deleted on directory: $dir for pattern: $pattern if not in test mode, only listing..."
                                 	find $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
                             	else
