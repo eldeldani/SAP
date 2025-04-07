@@ -4,7 +4,7 @@
 overall_exit_status=0
 # Redirect everything to log file
 current_date=$(date +%Y-%m-%d)
-# exec >> /tmp/sap_audit_housekeeping_$current_date.log 2>&1
+exec >> /tmp/sap_audit_housekeeping_$current_date.log 2>&1
 
 ##### Editable variables
 
