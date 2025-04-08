@@ -29,17 +29,16 @@
 overall_exit_status=0
 # Redirect everything to log file
 current_date=$(date +%Y-%m-%d)
-exec >> /tmp/sap_directories_housekeeping_"$current_date".log 2>&1
+exec >> /tmp/sap_directories_housekeeping_$current_date.log 2>&1
 
 ##### Editable variables
 
 # Different variables
 # keep_days: The script will delete anything older than keep_days
 # zip_days: The script will zip anything newer than keep_days and older than zip_days
-#keep_days=1825
-#zip_days=730
-keep_days=925
-zip_days=780
+keep_days=1825
+zip_days=730
+#zip_days=1780
 
 # Array declaration for the file patterns to cleanup, You can edit by extending the patterns:
 # i.e.: You wan to add the pattern *.gz you would append it to the end
@@ -78,8 +77,8 @@ if [ "$1" != "execute" ]; then
 else
         echo -e "$(date): Script being executed in EXECUTION mode."
 fi
-echo "$(date): SAP SIDs to analyze: " "${sid_array[@]}"
-echo "$(date): The following file patterns will be used: " "${file_pattern_array[@]}"
+echo "$(date): SAP SIDs to analyze: ${sid_array[@]}"
+echo "$(date): The following file patterns will be used: ${file_pattern_array[@]}"
 echo "$(date): Files older than $keep_days days will be deleted"
 echo "$(date): Files older than $zip_days days and newer than $keep_days days will be zipped"
 echo "$(date): Files newer than $zip_days days will not be touched"
@@ -101,37 +100,36 @@ df -h |grep sap >> /tmp/before_fs_usage
 
 #delete loop
 files_to_delete_found="no"
-for sap_sid in "${sid_array[@]}"
+for sap_sid in ${sid_array[@]}
 do
         # You can edit this paths by adding new ones
-        global="/usr/sap/$sap_sid/SYS/global"
-        work_ascs="/usr/sap/$sap_sid/ASCS[0-9][0-9]/work"
-        work_scs="/usr/sap/$sap_sid/SCS[0-9][0-9]/work"
-        work_ci="/usr/sap/$sap_sid/DVEBMGS[0-9][0-9]/work"
-        work_dia="/usr/sap/$sap_sid/D[0-9][0-9]/work"
-        work_java="/usr/sap/$sap_sid/J[0-9][0-9]/work"
+        global=/usr/sap/$sap_sid/SYS/global
+        work_ascs=/usr/sap/$sap_sid/ASCS[0-9][0-9]/work
+        work_scs=/usr/sap/$sap_sid/SCS[0-9][0-9]/work
+        work_ci=/usr/sap/$sap_sid/DVEBMGS[0-9][0-9]/work
+        work_dia=/usr/sap/$sap_sid/D[0-9][0-9]/work
+        work_java=/usr/sap/$sap_sid/J[0-9][0-9]/work
 
-        paths_array=( "$global" "$work_ascs" "$work_scs" "$work_ci" "$work_dia" "$work_java" )
+        paths_array=( $global $work_ascs $work_scs $work_ci $work_dia $work_java )
 
         # Loop for every directory
-        for dir in "${paths_array[@]}"
+        for dir in ${paths_array[@]}
         do
             if [ -d "$dir" ];then
             #echo -e "$(date): Working on directory: $dir"
-                for pattern in "${file_pattern_array[@]}"
+                for pattern in ${file_pattern_array[@]}
                     do
-                        files_to_delete=$(find "$dir" -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f)
+                        files_to_delete=$(find $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f)
                         if [ -n "$files_to_delete" ]; then
 				            files_to_delete_found="yes"
 				                if [ "$1" != "execute" ]; then
                                 	echo -e "$(date): The following files would be deleted on directory: $dir for pattern: $pattern if not in test mode, only listing..."
-                                	find "$dir" -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
+                                	find $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
                             	else
                                 	echo -e "$(date): The following files will be deleted on directory: $dir for pattern: $pattern"
-                                	find "$dir" -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
+                                	find $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
                                 	echo -e "$(date): Deleting the files..."
-                                	find "$dir" -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -dddelete
-                                	# shellcheck disable=SC2181
+                                	find $dir -maxdepth 1 -name "$pattern" -mtime +$keep_days -type f -dddelete
                                 	if ! [[ $? -eq 0 ]]; then
 	                                    	echo -e "$(date): Error when deleting files"
 	                                    	overall_exit_status=1
@@ -148,54 +146,51 @@ fi
 
 
 #zip loop
-for sap_sid in "${sid_array[@]}"
+for sap_sid in ${sid_array[@]}
 do
         # You can edit this paths by adding new ones
-        global="/usr/sap/$sap_sid/SYS/global"
-        work_ascs="/usr/sap/$sap_sid/ASCS[0-9][0-9]/work"
-        work_scs="/usr/sap/$sap_sid/SCS[0-9][0-9]/work"
-        work_ci="/usr/sap/$sap_sid/DVEBMGS[0-9][0-9]/work"
-        work_dia="/usr/sap/$sap_sid/D[0-9][0-9]/work"
-        work_java="/usr/sap/$sap_sid/J[0-9][0-9]/work"
+        global=/usr/sap/$sap_sid/SYS/global
+        work_ascs=/usr/sap/$sap_sid/ASCS[0-9][0-9]/work
+        work_scs=/usr/sap/$sap_sid/SCS[0-9][0-9]/work
+        work_ci=/usr/sap/$sap_sid/DVEBMGS[0-9][0-9]/work
+        work_dia=/usr/sap/$sap_sid/D[0-9][0-9]/work
+        work_java=/usr/sap/$sap_sid/J[0-9][0-9]/work
 
-        paths_array=( "$global" "$work_ascs" "$work_scs" "$work_ci" "$work_dia" "$work_java" )
+        paths_array=( $global $work_ascs $work_scs $work_ci $work_dia $work_java )
 
         # Loop for every directory
-        for dir in "${paths_array[@]}"
+        for dir in ${paths_array[@]}
         do
                         if [ -d "$dir" ];then
                                         #echo -e "$(date): Working on directory: $dir"
-                                        for pattern in "${file_pattern_array[@]}"
+                                        for pattern in ${file_pattern_array[@]}
                                         do
-                                                files_to_zip=$(find "$dir" -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f)
+                                                files_to_zip=$(find $dir -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f)
                                                 if [ -n "$files_to_zip" ]; then
                                                         if [ "$1" != "execute" ]; then
                                                                 echo -e "$(date): The following files would be zipped on directory: $dir for pattern: $pattern if not in test mode, only listing..."
-                                                                find "$dir" -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn                                                              
+                                                                find $dir -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn                                                              
                                                         else
                                                                 echo -e "$(date): The following files will be zipped on directory: $dir for pattern: $pattern"
-                                                                find "$dir" -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
+                                                                find $dir -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn
                                                                 echo -e "$(date): Zipping files..."                                                                
                                                                 case $COMPRESS_TOOL in
                                                                 gzip)
-                                                                    find "$dir" -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f -exec gzip {} \;
-                                                                    # shellcheck disable=SC2181
+                                                                    find $dir -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f -exec gzip {} \;
                                                                     if ! [[ $? -eq 0 ]]; then
                                                                         echo -e "$(date): Error when zipping files"
 				                                                        overall_exit_status=1
                                                                     fi
                                                                     ;;
                                                                 bzip2)
-                                                                    find "$dir" -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f -exec bzip2 {} \;
-                                                                    # shellcheck disable=SC2181
+                                                                    find $dir -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f -exec bzip2 {} \;
                                                                     if ! [[ $? -eq 0 ]]; then
                                                                         echo -e "$(date): Error when zipping files"
 				                                                        overall_exit_status=1
                                                                     fi
                                                                     ;;
                                                                 xz)
-                                                                    find "$dir" -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f -exec xz {} \;
-                                                                    # shellcheck disable=SC2181
+                                                                    find $dir -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f -exec xz {} \;
                                                                     if ! [[ $? -eq 0 ]]; then
                                                                         echo -e "$(date): Error when zipping files"
 				                                                        overall_exit_status=1
