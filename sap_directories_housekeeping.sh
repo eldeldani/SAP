@@ -36,6 +36,7 @@ exec >> /tmp/sap_directories_housekeeping_$current_date.log 2>&1
 # Different variables
 # keep_days: The script will delete anything older than keep_days
 # zip_days: The script will zip anything newer than keep_days and older than zip_days
+# 365 = 1 Year, 730 = 2 Years, 1095 = 3 Years, 1460 = 4 Years, 1825 = 5 Years, 3650 = 10 Years
 keep_days=1825
 zip_days=730
 #zip_days=1780
@@ -146,6 +147,7 @@ fi
 
 
 #zip loop
+files_to_zip_found="no"
 for sap_sid in ${sid_array[@]}
 do
         # You can edit this paths by adding new ones
@@ -167,6 +169,7 @@ do
                                         do
                                                 files_to_zip=$(find $dir -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f)
                                                 if [ -n "$files_to_zip" ]; then
+                                                    files_to_zip_found="yes"
                                                         if [ "$1" != "execute" ]; then
                                                                 echo -e "$(date): The following files would be zipped on directory: $dir for pattern: $pattern if not in test mode, only listing..."
                                                                 find $dir -maxdepth 1 -name "$pattern" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" -mtime +$zip_days -mtime -$keep_days -type f -printf '%TY-%Tm-%Td %p\n' | sort -rn                                                              
@@ -203,16 +206,20 @@ do
                         fi
         done
 done
+if [[ "$files_to_zip_found" = "no" ]]; then
+	echo -e "$(date): No files found to zip"
+fi
 
 # After filesystem usage loop
 df -h |grep sap >> /tmp/after_fs_usage
 
 #Show Filesystem usage befor and after
-echo -e "$(date): Filesystem usage before script:"
-cat /tmp/before_fs_usage
-echo -e "$(date): Filesystem usage after script:"
-cat /tmp/after_fs_usage
-
+if [ "$files_to_zip_found" = "yes" ] || [ "$files_to_delete_found" = "yes" ]; then
+    echo -e "$(date): Filesystem usage before script:"
+    cat /tmp/before_fs_usage
+    echo -e "$(date): Filesystem usage after script:"
+    cat /tmp/after_fs_usage
+fi
 #cleanup temporary files
 rm /tmp/before_fs_usage /tmp/after_fs_usage
 
