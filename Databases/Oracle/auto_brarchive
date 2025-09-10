@@ -1,0 +1,31 @@
+#!/bin/bash
+# Usage
+# ./auto_brarchive SID 80
+# Define the threshold
+SID=$1
+THRESHOLD=$2
+
+# Define the filesystem path
+FILESYSTEM="/oracle/"$SID"/oraarch"
+
+while true; do
+  # Get the filesystem usage percentage
+  USAGE=$(df -h $FILESYSTEM | awk 'NR==2 {print $5}' | sed 's/%//')
+
+  # Check if usage is above the threshold
+  if [ "$USAGE" -gt "$THRESHOLD" ]; then
+    echo "$(date): Filesystem usage is "$USAGE"% which is above "$THRESHOLD"%"
+    # Wheck if the process 'brarchive' is running
+    if pgrep -x "brarchive" > /dev/null; then
+      echo "Process 'brarchive' is running. Command will not be executed."
+    # Execute the command
+    else
+        echo "$(date): Executing backup..."
+        brarchive -d util_file -OSC -sd -c -u /
+    fi
+  else
+    echo "$(date): Filesystem usage for "$FILESYSTEM" is "$USAGE"% which is LOWER than "$THRESHOLD"%. Skipping execution..."
+    # echo "$(date): Sleeping 1 minute...
+  fi
+  sleep 60
+done

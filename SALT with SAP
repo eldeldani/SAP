@@ -1,0 +1,504 @@
+Docker
+
+# List all available docker images
+docker ps
+
+# Listar todos los minios
+salt-key -L
+
+# Ejecutar comando en minion
+salt 'TYSV003.dmgmori.net' cmd.run 'hostname'
+salt 'TYSV003.dmgmori.net' test.version
+
+# Recuperar grains posibles para minion
+salt -G os:SUSE --preview-target
+salt -G os:Windows --preview-target
+
+salt <minion> pillar.items
+salt <minion> grains.items
+# query all minions having nttcms_platform=ASK_AWS_*
+salt -C 'I@servicenow:nttcms_platform:ASK_AWS_*' test.ping
+
+# query all minions having nttcms_platform=ASK_AWS_* and get its nodename grain value
+salt -C 'I@servicenow:nttcms_platform:ASK_AWS_*' grains.get nodename
+
+# Query all minions belonging to ASK_AWS_* pillar and return the nttcms_service_group pillar value
+salt -C 'I@servicenow:nttcms_platform:ASK_AWS_*' pillar.get servicenow:nttcms_service_group
+
+# Query minions with pillar nttcms_platform matching ASK_AWS* and grain kernel=Linux and not being of nttcms_service_group SAP_Router and get their nttcms_service_group
+salt -C 'I@servicenow:nttcms_platform:ASK_AWS* and G@kernel:Linux and not I@servicenow:nttcms_service_group:SAP_Router' pillar.get servicenow:nttcms_service_group
+salt -C 'I@servicenow:nttcms_platform'
+salt -C '' cmd.run "/usr/sap/hostctrl/exe/saphostctrl -function GetCIMObject -enuminstances SAPInstance" |egrep -e 'SID|SystemNumber|InstanceType|Hostname|SapVersionInfo' > /tmp/sap-instances.txt
+
+# Crear grains custom para SAP
+1. modify the file /etc/salt/minion on each of the affected minion with the format:
+grains:
+ roles:
+ - role1, role2, role3
+2. Restart minion
+systemctl restart salt-minion
+3. Test it 
+
+#Execute SALT state
+You need to create state.sls
+salt <minion> state.apply state
+
+You can pass arguments
+
+
+
+
+
+====================================
+==========> ABAP Product Versions
+====================================
+
+HANA-based
+salt -L 'HOST002.domain.net,HOST012.domain.net,HOST059.domain.net,HOST016.domain.net,HOST064.domain.net,HOST070.domain.net,HOST072,HOST044.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select NAME, VERSION, DESCRIPT from PRDVERS;\"'"
+
+ORACLE-based
+
+ASE-based
+salt -L 'HOST033.domain.net, HOST034.domain.net, HOST035.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'echo \"SET NOCOUNT ON\" > /tmp/temporaryfileSAP && echo \"select NAME, VERSION, DESCRIPT into foo# from PRDVERS\" >> /tmp/temporaryfileSAP && echo \"execute sp_autoformat foo#\" >> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && echo \"drop table foo#\">> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && isql -s \";\" -k sapsr3 -w999 -X -i /tmp/temporaryfileSAP | sed -e '\''s/; */;/g'\'' -e '\''s/ *;/;/g'\'' |grep -v \"-\" && rm /tmp/temporaryfileSAP'"
+
+
+Solman-specific
+salt -L 'HOST007.domain.net,HOST038.domain.net' cmd.run "su - \`grep -m 1 '.*s2adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select NAME, VERSION, DESCRIPT from PRDVERS;\"'"
+
+
+
+====================================
+==========> JAVA Versions
+====================================
+
+--> Tables BC_SL_PRDVERS, BC_SL_SWFEATURE, BC_SL_SWFEATUREINC
+select * from BC_COMPVERS
+select SCNAME, SAPRELEASE, SERVICELEVEL,PATCHLEVEL from BC_COMPVERS where COMPONENTTYPE = 'SC'
+
+aseuserstore set sapsr3db `echo $HOSTNAME`:4901 SAPSR3DB QG1sys2020
+
+isql -s ";" -k sapsso -w999 -X
+
+isql -k SAPSR3db -w999 -X
+
+salt -L 'HOST005.domain.net, HOST015.domain.net, HOST062.domain.net, HOST021.domain.net, HOST066.domain.net, HOST071.domain.net, HOST077.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'echo \"SET NOCOUNT ON\" > /tmp/temporaryfileSAP && echo \"select NAME, VERSION, DESCRIPT into foo# from BC_SL_SWFEATURE\" >> /tmp/temporaryfileSAP && echo \"execute sp_autoformat foo#\" >> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && echo \"drop table foo#\">> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && isql -s \";\" -k sapsr3 -w999 -X -i /tmp/temporaryfileSAP | sed -e '\''s/; */;/g'\'' -e '\''s/ *;/;/g'\'' |grep -v \"-\" && rm /tmp/temporaryfileSAP'"
+
+
+Solman-specific
+salt -L 'HOST007.domain.net,HOST038.domain.net' cmd.run "su - \`grep -m 1 '.*s3adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select NAME, VERSION, DESCRIPT from BC_SL_SWFEATURE\"'"
+
+
+
+
+===========================
+==========> HANA Versions 
+===========================
+
+
+salt -L 'HOST002.domain.net,HOST012.domain.net,HOST059.domain.net,HOST016.domain.net, HOST064.domain.net,HOST070.domain.net,HOST072,HOST044.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select PPMS_ID, COMPONENT_NAME, VERSION, COMPONENT_DESCRIPTION from LCM_SOFTWARE_COMPONENTS\"'"
+
+
+
+Solman-specific
+salt -L 'HOST007.domain.net,HOST038.domain.net' cmd.run "su - \`grep -m 1 '.*s2adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select PPMS_ID, COMPONENT_NAME, VERSION, COMPONENT_DESCRIPTION from LCM_SOFTWARE_COMPONENTS\"'"
+
+
+ℹ️ List unique SAP admin users in HOST
+grep adm /usr/sap/sapservices |grep -v SMD |awk '{print $NF}'|uniq
+
+
+===================================
+==========> ASE Components&Versions
+===================================
+
+Pre-requisites as <sid>adm:
+	- we need to create an aseuserstore entry named "sapsr3"
+	-- For ABAP
+		aseuserstore set sapsr3 `hostname`:4901 SAPSR3DB <pass>
+		aseuserstore set sapsr3db `hostname`:4901 SAPSR3DB <pass>
+	-- For JAVA
+		aseuserstore set sapsr3 `hostname`:4901 SAPSR3DB <pass>
+		aseuserstore set sapsr3db `hostname`:4901 SAPSR3DB <pass>
+	-- For BOBJ
+		aseuserstore set sapsr3 `hostname`:5000 sa/sapsa <pass>
+		aseuserstore set sapsr3db `hostname`:5000 sa/sapsa <pass>
+		aseuserstore set sapsr3 `hostname`:5000 sa C3ntral.DMG24
+	*Note: special characters need to be escaped. i.e. "!" or \$
+
+Netweaver-based
+salt -L 'HOST033.domain.net, HOST034.domain.net, HOST035.domain.net, HOST005.domain.net, HOST015.domain.net, HOST062.domain.net, HOST021.domain.net, HOST066.domain.net, HOST071.domain.net, HOST077.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'echo \"SET NOCOUNT ON\" > /tmp/temporaryfileSAP && echo \"select @@version\" >> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && isql -s \";\" -k sapsr3 -w999 -X -i /tmp/temporaryfileSAP | sed -e '\''s/; */;/g'\'' -e '\''s/ *;/;/g'\'' |grep \"Adap\" && rm /tmp/temporaryfileSAP'"
+
+Non-netweaver based -> BOBJ
+salt -L 'HOST006.domain.net, HOST013.domain.net, HOST091.domain.net' cmd.run "su - \`egrep -m 1 '[[:alpha:]][[:alpha:]][[:digit:]]adm' /etc/passwd| awk -F\":\" '{ print \$1 }'\` -c 'echo \"SET NOCOUNT ON\" > /tmp/temporaryfileSAP && echo \"select @@version\" >> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && isql -s \";\" -k sapsr3 -w999 -X -i /tmp/temporaryfileSAP | sed -e '\''s/; */;/g'\'' -e '\''s/ *;/;/g'\'' |grep \"Adap\" && rm /tmp/temporaryfileSAP'"
+
+
+
+=======================================
+==========> SAP Cloud connector version
+=======================================
+
+salt 'HOST052.domain.net' cmd.run "cat /opt/sap/scc/version.properties |grep scc.version|grep -v \"#\"|awk -F\"=\" '{ print \";\"\$1\";\"\$2 }'"
+
+
+===============================================
+==========> SAP Data Provisioning Agent version
+===============================================
+
+salt 'HOST052.domain.net' cmd.run "for i in \`ls /usr/sap/dataprovagent\`; do echo \"\$i \";cat /usr/sap/dataprovagent/\$i/versions.txt|grep dpagent.version|awk -F\"dpagent.version=\" '{ print \";dpagent version;\"\$2 }'; done"
+
+
+===========================================
+==========> SAP Data Services Agent version
+===========================================
+
+salt -L 'HOST052.domain.net' cmd.run "grep -m 1 AgentVersion /usr/sap/DS/log/dsod/*.log |tail -1 |awk -F\"AgentVersion=\" '{ print \"Agent Version=\" \$2  }' |awk -F\";\" '{ print \";\"\$1\"\n\"\";\"\$2\"\n\"\";\"\$3 }'|sed 's/=/;/'"
+
+
+=======================================
+==========> SAPRouter version
+=======================================
+
+salt -L 'HOST003.domain.net' cmd.run "su - pr1adm -c '/usr/sap/saprouter/saprouter -v |egrep -e '\''kernel release|patch number'\''|awk '\''{print \$3\";\"}'\''|xargs -n2 -d'\''\n'\'''"
+
+
+==================================================
+==========> SAP Data Services / IPS / BIP version
+==================================================
+
+salt -L 'HOST006.domain.net, HOST013.domain.net, HOST091.domain.net' cmd.run "iconv -f UTF-32 -t UTF8 /usr/sboe/???/InstallData/inventory.txt|egrep -e 'SAP Data Services' |tail -1|awk -F\"SAP Data Services\" '{ print \";SAP Data Services;\"\$2 }' && iconv -f UTF-32 -t UTF8 /usr/sboe/???/InstallData/inventory.txt|egrep -e 'Information platform services' |tail -1|awk -F\"Information platform services\" '{ print \";Information platform services;\"\$2 }'"
+
+===========================
+==========> SAP Instances
+===========================
+
+salt -L 'HOST001.domain.net, HOST002.domain.net, HOST005.domain.net, HOST006.domain.net, HOST007.domain.net, HOST011.domain.net, HOST012.domain.net, HOST013.domain.net, HOST015.domain.net, HOST016.domain.net, HOST017.domain.net, HOST018.domain.net, HOST019.domain.net, HOST021.domain.net, HOST022.domain.net, HOST033.domain.net, HOST034.domain.net, HOST035.domain.net, HOST038.domain.net, HOST039.domain.net, HOST043.domain.net, HOST044.domain.net, HOST058.domain.net, HOST062.domain.net, HOST064.domain.net, HOST065.domain.net, HOST066.domain.net, HOST069.domain.net, HOST070.domain.net, HOST071.domain.net, HOST072, HOST073, HOST074, HOST075, HOST076.domain.net, HOST077.domain.net, HOST085, HOST086, HOST059.domain.net' cmd.run "/usr/sap/hostctrl/exe/saphostctrl -function GetCIMObject -enuminstances SAPInstance" |egrep -e 'SID|SystemNumber|InstanceType|Hostname|SapVersionInfo' > /tmp/sap-instances.txt
+
+cd /tmp/
+./sap-list-instances.sh
+
+
+#!/bin/bash
+# Ejecuta el comando y guarda la salida
+
+fichero="/tmp/sap-instances.txt"
+
+# Inicializa un array vacío
+#array=( "SID" "SystemNumber" "InstanceType" "Hostname" "SapVersionInfo")
+echo "SID;SystemNumber;InstanceType;Hostname;FullQualifiedHostname;SapVersionInfo" > /tmp/sap-instances-output.txt
+
+# Lee la salida línea por línea
+array=()
+i=1
+while IFS= read -r linea; do
+	if [[ $i -eq 1 ]] && [[ $linea == *"SID"* ]]; then
+        SID=$(echo $linea | cut -d ',' -f 3)
+		SID_noblanks=$(echo -e "$SID" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+		array+=( "$SID_noblanks;" )
+    fi
+	if [[ $linea == *"SID"* ]] && [[ $i -ne 1 ]]; then
+		#esto es nueva linea
+		#echo ${array[@]} >> sap-instances-output.txt
+		array_noblanks=$(echo -e ${array[@]} | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+		echo $array_noblanks >> sap-instances-output.txt
+		array=()
+		SID=$(echo $linea | cut -d ',' -f 3)
+		SID_noblanks=$(echo -e "$SID" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+		array+=( "$SID_noblanks;" )
+    fi
+	if [[ $linea == *"SystemNumber"* ]]; then
+		SystemNumber=$(echo $linea | cut -d ',' -f 3)
+		SystemNumber_noblanks=$(echo -e "$SystemNumber" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+		array+=( "$SystemNumber_noblanks;" )
+	fi
+	if [[ $linea == *"InstanceType"* ]]; then
+		InstanceType=$(echo $linea | cut -d ',' -f 3)
+		InstanceType_noblanks=$(echo -e "$InstanceType" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+		array+=( "$InstanceType_noblanks;" )
+    fi
+	if [[ $linea == *"Hostname"* ]] && [[ $linea != *"FullQualifiedHostname"* ]]; then
+		Hostname=$(echo $linea | cut -d ',' -f 3)
+		Hostname_noblanks=$(echo -e "$Hostname" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+		array+=( "$Hostname_noblanks;" )
+    fi
+	if [[ $linea == *"FullQualifiedHostname"* ]]; then
+		FullQualifiedHostname=$(echo $linea | cut -d ',' -f 3)
+		FullQualifiedHostname_noblanks=$(echo -e "$FullQualifiedHostname" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+		array+=( "$FullQualifiedHostname_noblanks;" )
+    fi
+	if [[ $linea == *"SapVersionInfo"* ]]; then
+		SapVersionInfo=$(echo $linea | cut -d ',' -f 3,4)
+		SapVersionInfo_noblanks=$(echo -e "$SapVersionInfo" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+		array+=( "$SapVersionInfo_noblanks;" )
+    fi
+	((i++))
+done < "$fichero"
+sed 's/; /;/g' /tmp/sap-instances-output.txt > /tmp/sap-instances-output2.txt
+rm /tmp/sap-instances-output.txt
+cat /tmp/sap-instances-output2.txt
+
+
+
+
+===================================
+==========> ABAP Client information
+===================================
+
+
+HANA-based
+salt -L 'HOST002.domain.net,HOST012.domain.net,HOST059.domain.net,HOST016.domain.net,HOST064.domain.net,HOST070.domain.net,HOST072,HOST044.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select MANDT, MTEXT, ORT01, MWAER, CCCATEGORY, CCCORACTIV, CCNOCLIIND, CCCOPYLOCK, CCIMAILDIS, LOGSYS from T000\"'"
+
+ASE-based
+salt -L 'HOST033.domain.net, HOST034.domain.net, HOST035.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'echo \"SET NOCOUNT ON\" > /tmp/temporaryfileSAP && echo \"select MANDT, MTEXT, ORT01, MWAER, CCCATEGORY, CCCORACTIV, CCNOCLIIND, CCCOPYLOCK, CCIMAILDIS, LOGSYS into foo# from T000\" >> /tmp/temporaryfileSAP && echo \"execute sp_autoformat foo#\" >> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && echo \"drop table foo#\">> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && isql -s \";\" -k sapsr3 -w999 -X -i /tmp/temporaryfileSAP | sed -e '\''s/; */;/g'\'' -e '\''s/ *;/;/g'\'' |grep -v \"-\" && rm /tmp/temporaryfileSAP'"
+
+
+Solman-specific
+salt -L 'HOST007.domain.net,HOST038.domain.net' cmd.run "su - \`grep -m 1 '.*s2adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select MANDT, MTEXT, ORT01, MWAER, CCCATEGORY, CCCORACTIV, CCNOCLIIND, CCCOPYLOCK, CCIMAILDIS, LOGSYS from T000\"'"
+
+
+
+====================================
+==========> ABAP Installed Languages
+====================================
+
+HANA-based
+salt -L 'HOST002.domain.net,HOST012.domain.net,HOST059.domain.net,HOST016.domain.net,HOST064.domain.net,HOST070.domain.net,HOST072,HOST044.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select * from T002C\"'"
+
+ASE-based
+salt -L 'HOST033.domain.net, HOST034.domain.net, HOST035.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'echo \"SET NOCOUNT ON\" > /tmp/temporaryfileSAP && echo \"select * into foo# from T002C\" >> /tmp/temporaryfileSAP && echo \"execute sp_autoformat foo#\" >> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && echo \"drop table foo#\">> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && isql -s \";\" -k sapsr3 -w999 -X -i /tmp/temporaryfileSAP | sed -e '\''s/; */;/g'\'' -e '\''s/ *;/;/g'\'' |grep -v \"-\" && rm /tmp/temporaryfileSAP'"
+
+Solman-specific
+salt -L 'HOST007.domain.net,HOST038.domain.net' cmd.run "su - \`grep -m 1 '.*s2adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select * from T002C\"'"
+
+
+
+===========================
+==========> ABAP LOGON GROUPS
+===========================
+
+SELECT A1.GRPNAME, B1.APPSRVNAME FROM TSRVLST as A1 LEFT JOIN TSRVGRP as B1 on A1.GUID=B1.GUID;
+
+HANA-based
+salt -L 'HOST002.domain.net,HOST012.domain.net,HOST059.domain.net,HOST016.domain.net,HOST064.domain.net,HOST070.domain.net,HOST072,HOST044.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select * from RZLLITAB;\"'"
+
+ASE-based
+salt -L 'HOST033.domain.net, HOST034.domain.net, HOST035.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'echo \"SET NOCOUNT ON\" > /tmp/temporaryfileSAP && echo \"select * into foo# from RZLLITAB\" >> /tmp/temporaryfileSAP && echo \"execute sp_autoformat foo#\" >> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && echo \"drop table foo#\">> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && isql -s \";\" -k sapsr3 -w999 -X -i /tmp/temporaryfileSAP | sed -e '\''s/; */;/g'\'' -e '\''s/ *;/;/g'\'' |grep -v \"-\" && rm /tmp/temporaryfileSAP'"
+
+Solman-specific
+salt -L 'HOST007.domain.net,HOST038.domain.net' cmd.run "su - \`grep -m 1 '.*s2adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select * from RZLLITAB\"'"
+
+=============================
+==========> ABAP BATCH GROUPS
+=============================
+
+HANA-based
+salt -L 'HOST002.domain.net,HOST012.domain.net,HOST059.domain.net,HOST016.domain.net,HOST064.domain.net,HOST070.domain.net,HOST072,HOST044.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"SELECT A1.GRPNAME, B1.APPSRVNAME FROM TSRVGRP as A1 LEFT JOIN TSRVLST as B1 on A1.GUID=B1.GUID\"'"
+
+ASE-based
+salt -L 'HOST033.domain.net, HOST034.domain.net, HOST035.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'echo \"SET NOCOUNT ON\" > /tmp/temporaryfileSAP && echo \"SELECT A1.GRPNAME, B1.APPSRVNAME into foo# FROM TSRVGRP as A1 LEFT JOIN TSRVLST as B1 on A1.GUID=B1.GUID\" >> /tmp/temporaryfileSAP && echo \"execute sp_autoformat foo#\" >> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && echo \"drop table foo#\">> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && isql -s \";\" -k sapsr3 -w999 -X -i /tmp/temporaryfileSAP | sed -e '\''s/; */;/g'\'' -e '\''s/ *;/;/g'\'' |grep -v \"-\" && rm /tmp/temporaryfileSAP'"
+
+Solman-specific
+salt -L 'HOST007.domain.net,HOST038.domain.net' cmd.run "su - \`grep -m 1 '.*s2adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"SELECT A1.GRPNAME, B1.APPSRVNAME FROM TSRVGRP as A1 LEFT JOIN TSRVLST as B1 on A1.GUID=B1.GUID\"'"
+
+==============================
+==========> HANA Backup Config
+==============================
+
+SELECT * FROM M_INIFILE_CONTENTS where key in ('log_mode,catalog_backup_parameter_file','data_backup_parameter_file','log_backup_using_backint','log_backup_timeout_s','enable_auto_log_backup','catalog_backup_using_backint');
+
+S/4HANA AG
+salt -L 'HOST002.domain.net,HOST012.domain.net,HOST059.domain.net,HOST016.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select * from M_INIFILE_CONTENTS\"'"
+
+S/4HANA CO
+salt -L 'HOST064.domain.net,HOST070.domain.net,HOST072,HOST044.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select * from M_INIFILE_CONTENTS\"'"
+
+
+================================
+==========> ABAP OPERATION MODES
+================================
+
+HANA-based
+salt -L 'HOST002.domain.net,HOST012.domain.net,HOST059.domain.net,HOST016.domain.net,HOST064.domain.net,HOST070.domain.net,HOST072,HOST044.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select C1.SYSNAME, C1.HOST, C1.APSERVER, A1.BANAME, B1.STARTTIME, B1.ENDTIME, C1.WPNODIA, C1.WPNOVB, C1.WPNOBTC, C1.WPNOENQ, C1.WPNOSPO, C1.WPNO from TPFBA as A1 LEFT JOIN BTCOMSET as B1 on A1.BANAME=B1.MODENAME LEFT JOIN TPFID as C1 on A1.BANAME=C1.BANAME;\"'"
+
+ASE-based
+salt -L 'HOST033.domain.net, HOST034.domain.net, HOST035.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'echo \"SET NOCOUNT ON\" > /tmp/temporaryfileSAP && echo \"select C1.SYSNAME, C1.HOST, C1.APSERVER, A1.BANAME, B1.STARTTIME, B1.ENDTIME, C1.WPNODIA, C1.WPNOVB, C1.WPNOBTC, C1.WPNOENQ, C1.WPNOSPO, C1.WPNO into foo# from TPFBA as A1 LEFT JOIN BTCOMSET as B1 on A1.BANAME=B1.MODENAME LEFT JOIN TPFID as C1 on A1.BANAME=C1.BANAME\" >> /tmp/temporaryfileSAP && echo \"execute sp_autoformat foo#\" >> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && echo \"drop table foo#\">> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && isql -s \";\" -k sapsr3 -w999 -X -i /tmp/temporaryfileSAP | sed -e '\''s/; */;/g'\'' -e '\''s/ *;/;/g'\'' |grep -v \"-\" && rm /tmp/temporaryfileSAP'"
+
+Solman-specific
+salt -L 'HOST007.domain.net,HOST038.domain.net' cmd.run "su - \`grep -m 1 '.*s2adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select C1.SYSNAME, C1.HOST, C1.APSERVER, A1.BANAME, B1.STARTTIME, B1.ENDTIME, C1.WPNODIA, C1.WPNOVB, C1.WPNOBTC, C1.WPNOENQ, C1.WPNOSPO, C1.WPNO from TPFBA as A1 LEFT JOIN BTCOMSET as B1 on A1.BANAME=B1.MODENAME LEFT JOIN TPFID as C1 on A1.BANAME=C1.BANAME;\"'"
+
+
+==========================================
+==========> ABAP CUA MODEL (ON CUA MASTER)
+==========================================
+ALL
+salt 'HOST007.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select CLIENT, MODEL, RCVSYSTEM, SYSNAME SYSCLIENT from USZBVLNDRC order by sysname;\"'"
+
+
+
+=========================================
+==========> ABAP PARAMETERS 
+=========================================
+
+select PFNAME,PARNAME,PVALUE from TPFET where parname in ('login/disable_multi_gui_login','login/disable_password_logon') and versnr in (select max(versnr) from tpfet where parname like 'login%') order by parname;
+
+	HANA-based
+	salt -L 'HOST002.domain.net,HOST012.domain.net,HOST059.domain.net,HOST016.domain.net,HOST064.domain.net,HOST070.domain.net,HOST072,HOST044.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select PFNAME,PARNAME,PVALUE from TPFET where PARNAME in ('\''login/disable_multi_gui_login'\'', '\''login/disable_password_logon'\'', '\''login/failed_user_auto_unlock'\'', '\''login/fails_to_session_end'\'', '\''login/fails_to_user_lock'\'', '\''login/min_password_diff'\'', '\''login/min_password_digits'\'', '\''login/min_password_letters'\'', '\''login/min_password_lng'\'', '\''login/min_password_lowercase'\'', '\''login/min_password_specials'\'', '\''login/min_password_uppercase'\'', '\''login/no_automatic_user_sapstar'\'', '\''login/password_change_for_SSO'\'', '\''login/password_change_waittime'\'', '\''login/password_charset'\'', '\''login/password_downwards_compatibility'\'', '\''login/password_expiration_time'\'', '\''login/password_history_size'\'', '\''login/password_max_idle_initial'\'', '\''login/password_max_idle_productive'\'', '\''login/ticket_expiration_time'\'', '\''login/ticket_only_to_host'\'', '\''login/ticketcache_entries_max'\'', '\''login/ticket_only_by_https'\'', '\''login/password_compliance_to_current_policy'\'', '\''rdisp/gui_auto_logout'\'', '\''gw/reg_no_conn_info'\'', '\''rsau/enable'\'', '\''rsau/selection_slots'\'', '\''rsau/user_selection'\'', '\''snc/accept_insecure_cpic'\'', '\''snc/accept_insecure_gui'\'', '\''snc/accept_insecure_rfc'\'', '\''snc/enable'\'', '\''snc/permit_insecure_start'\'', '\''icf/set_HTTPonly_flag_on_cookies'\'', '\''auth/check/calltransaction'\'', '\''auth/rfc_authority_check'\'', '\''rfc/callback_security_method'\'', '\''snc/identity/as'\'', '\''icm/server_port[0]'\'', '\''icm/server_port[1]'\'', '\''icm/server_port[2]'\'', '\''icm/host_name_full'\'', '\''sapgui/user_scripting'\'', '\''rec/client'\'', '\''abap/shared_objects_size_MB'\'') and versnr in (select max(versnr) from TPFET where PARNAME like '\''login%'\'') order by PARNAME;\"'"
+
+
+	ASE-based
+	salt -L 'HOST033.domain.net, HOST034.domain.net, HOST035.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'echo \"SET NOCOUNT ON\" > /tmp/temporaryfileSAP && echo \"select PFNAME, PARNAME, PVALUE into foo# from TPFET where PARNAME in ('\''login/disable_multi_gui_login'\'', '\''login/disable_password_logon'\'', '\''login/failed_user_auto_unlock'\'', '\''login/fails_to_session_end'\'', '\''login/fails_to_user_lock'\'', '\''login/min_password_diff'\'', '\''login/min_password_digits'\'', '\''login/min_password_letters'\'', '\''login/min_password_lng'\'', '\''login/min_password_lowercase'\'', '\''login/min_password_specials'\'', '\''login/min_password_uppercase'\'', '\''login/no_automatic_user_sapstar'\'', '\''login/password_change_for_SSO'\'', '\''login/password_change_waittime'\'', '\''login/password_charset'\'', '\''login/password_downwards_compatibility'\'', '\''login/password_expiration_time'\'', '\''login/password_history_size'\'', '\''login/password_max_idle_initial'\'', '\''login/password_max_idle_productive'\'', '\''login/ticket_expiration_time'\'', '\''login/ticket_only_to_host'\'', '\''login/ticketcache_entries_max'\'', '\''login/ticket_only_by_https'\'', '\''login/password_compliance_to_current_policy'\'', '\''rdisp/gui_auto_logout'\'', '\''gw/reg_no_conn_info'\'', '\''rsau/enable'\'', '\''rsau/selection_slots'\'', '\''rsau/user_selection'\'', '\''snc/accept_insecure_cpic'\'', '\''snc/accept_insecure_gui'\'', '\''snc/accept_insecure_rfc'\'', '\''snc/enable'\'', '\''snc/permit_insecure_start'\'', '\''icf/set_HTTPonly_flag_on_cookies'\'', '\''auth/check/calltransaction'\'', '\''auth/rfc_authority_check'\'', '\''rfc/callback_security_method'\'', '\''snc/identity/as'\'', '\''icm/server_port[0]'\'', '\''icm/server_port[1]'\'', '\''icm/server_port[2]'\'', '\''icm/host_name_full'\'', '\''sapgui/user_scripting'\'', '\''rec/client'\'', '\''abap/shared_objects_size_MB'\'') and VERSNR in (select max(VERSNR) from TPFET where PARNAME like '\''login%'\'') order by PARNAME\" >> /tmp/temporaryfileSAP && echo \"execute sp_autoformat foo#\" >> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && echo \"drop table foo#\">> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && isql -s \";\" -k sapsr3 -w999 -X -i /tmp/temporaryfileSAP | sed -e '\''s/; */;/g'\'' -e '\''s/ *;/;/g'\'' |grep -v \"-\" && rm /tmp/temporaryfileSAP'"
+
+	Solman-specific
+	salt -L 'HOST007.domain.net,HOST038.domain.net' cmd.run "su - \`grep -m 1 '.*s2adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select PFNAME,PARNAME,PVALUE from TPFET where PARNAME in ('\''login/disable_multi_gui_login'\'', '\''login/disable_password_logon'\'', '\''login/failed_user_auto_unlock'\'', '\''login/fails_to_session_end'\'', '\''login/fails_to_user_lock'\'', '\''login/min_password_diff'\'', '\''login/min_password_digits'\'', '\''login/min_password_letters'\'', '\''login/min_password_lng'\'', '\''login/min_password_lowercase'\'', '\''login/min_password_specials'\'', '\''login/min_password_uppercase'\'', '\''login/no_automatic_user_sapstar'\'', '\''login/password_change_for_SSO'\'', '\''login/password_change_waittime'\'', '\''login/password_charset'\'', '\''login/password_downwards_compatibility'\'', '\''login/password_expiration_time'\'', '\''login/password_history_size'\'', '\''login/password_max_idle_initial'\'', '\''login/password_max_idle_productive'\'', '\''login/ticket_expiration_time'\'', '\''login/ticket_only_to_host'\'', '\''login/ticketcache_entries_max'\'', '\''login/ticket_only_by_https'\'', '\''login/password_compliance_to_current_policy'\'', '\''rdisp/gui_auto_logout'\'', '\''gw/reg_no_conn_info'\'', '\''rsau/enable'\'', '\''rsau/selection_slots'\'', '\''rsau/user_selection'\'', '\''snc/accept_insecure_cpic'\'', '\''snc/accept_insecure_gui'\'', '\''snc/accept_insecure_rfc'\'', '\''snc/enable'\'', '\''snc/permit_insecure_start'\'', '\''icf/set_HTTPonly_flag_on_cookies'\'', '\''auth/check/calltransaction'\'', '\''auth/rfc_authority_check'\'', '\''rfc/callback_security_method'\'', '\''snc/identity/as'\'', '\''icm/server_port[0]'\'', '\''icm/server_port[1]'\'', '\''icm/server_port[2]'\'', '\''icm/host_name_full'\'', '\''sapgui/user_scripting'\'', '\''rec/client'\'', '\''abap/shared_objects_size_MB'\'') and versnr in (select max(versnr) from TPFET where PARNAME like '\''login%'\'') order by PARNAME;\"'"
+
+
+============================
+==========> Gateway Security
+============================
+
+salt -L 'HOST002.domain.net, HOST012.domain.net, HOST005.domain.net, HOST015.domain.net, HOST016.domain.net, HOST017.domain.net, HOST018.domain.net, HOST021.domain.net, HOST022.domain.net, HOST033.domain.net, HOST034.domain.net, HOST035.domain.net, HOST044.domain.net, T, HOST062.domain.net, HOST064.domain.net, HOST066.domain.net, HOST070.domain.net, HOST072, HOST073, HOST074, HOST076.domain.net, HOST077.domain.net, HOST059.domain.net' cmd.run "ps -ef|grep profile|egrep -e 'gwrd|gw.sap'|grep -v root |sed 's/ -no_abap//g'|sed 's/ -abap//g' |egrep -e 'gw\/' \`awk -F\"pf=\" '{ print \$2 }'\`"
+
+
+salt -L 'HOST002.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'ps -ef|grep profile|egrep -e '\''gwrd|gw.sap'\''|grep -v root |sed '\''s/ -no_abap//g'\''|sed '\''s/ -abap//g'\'' |awk -F\"pf=\" '\''{ print \$2 }'\'''"
+
+salt -L 'HOST002.domain.net, HOST012.domain.net, HOST005.domain.net, HOST015.domain.net, HOST016.domain.net, HOST017.domain.net, HOST018.domain.net, HOST021.domain.net, HOST022.domain.net, HOST033.domain.net, HOST034.domain.net, HOST035.domain.net, HOST044.domain.net, HOST062.domain.net, HOST064.domain.net, HOST066.domain.net, HOST070.domain.net, HOST072, HOST073, HOST074, HOST076.domain.net, HOST077.domain.net, HOST059.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'ps -ef|grep profile|egrep -e '\''gwrd|gw.sap'\''|grep -v root |sed '\''s/ -no_abap//g'\''|sed '\''s/ -abap//g'\'' |awk -F\"pf=\" '\''{ print \$2 }'\''| xargs -I {} sappfpar all pf={} |egrep -e '\''gw\/acl_file|gw\/acl_mode|gw\/sim_mode|gw\/reg_info|gw\/sec_info|gw\/reg_no_conn_info|gw\/monitor|gw\/logging'\''|sort|uniq'"
+
+
+salt -L 'HOST002.domain.net, HOST012.domain.net, HOST005.domain.net, HOST015.domain.net, HOST016.domain.net, HOST017.domain.net, HOST018.domain.net, HOST021.domain.net, HOST022.domain.net, HOST033.domain.net, HOST034.domain.net, HOST035.domain.net, HOST044.domain.net, HOST062.domain.net, HOST064.domain.net, HOST066.domain.net, HOST070.domain.net, HOST072, HOST073, HOST074, HOST076.domain.net, HOST077.domain.net, HOST059.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'ps -ef|grep profile|egrep -e '\''gwrd|gw.sap'\''|grep -v root |sed '\''s/ -no_abap//g'\''|sed '\''s/ -abap//g'\'' |awk -F\"pf=\" '\''{ print \$2 }'\''| xargs -I {} sappfpar all pf={} |egrep -e '\''gw\/acl_mode|gw\/sim_mode|gw\/reg_info|gw\/sec_info|gw\/reg_no_conn_info|gw\/monitor'\''|sort|uniq|awk '\''{ print \";\"\$2\";\"\$3\" \"\$4\" \"\$5\" \"\$6 }'\'''"
+
+
+Solman-specific
+
+HOST038.domain.net, HOST007.domain.net
+
+
+
+
+============================
+==========> ABAP SLD DESTINATIONS
+============================
+
+===> ABAP
+SLDAGADM RFCDEST
+
+HANA-based
+salt -L 'HOST002.domain.net,HOST012.domain.net,HOST059.domain.net,HOST016.domain.net,HOST064.domain.net,HOST070.domain.net,HOST072,HOST044.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select A1.PROGNAME, A1.ACTIVE, A1.RFCDEST, B1.RFCOPTIONS FROM SLDAGADM AS A1 LEFT JOIN RFCDES AS B1 ON A1.RFCDEST=B1.RFCDEST WHERE A1.PROGNAME NOT LIKE '\''_SLD%'\'';\"'"
+
+ASE-based
+salt -L 'HOST033.domain.net, HOST034.domain.net, HOST035.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'echo \"SET NOCOUNT ON\" > /tmp/temporaryfileSAP && echo \"select A1.PROGNAME, A1.ACTIVE, A1.RFCDEST, B1.RFCOPTIONS INTO foo# FROM SLDAGADM AS A1 LEFT JOIN RFCDES AS B1 ON A1.RFCDEST=B1.RFCDEST WHERE A1.PROGNAME NOT LIKE '\''_SLD%'\''\" >> /tmp/temporaryfileSAP && echo \"execute sp_autoformat foo#\" >> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && echo \"drop table foo#\">> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && isql -s \";\" -k sapsr3 -w999 -X -i /tmp/temporaryfileSAP | sed -e '\''s/; */;/g'\'' -e '\''s/ *;/;/g'\'' |grep -v \"-\" && rm /tmp/temporaryfileSAP'"
+
+Solman-specific
+salt -L 'HOST007.domain.net,HOST038.domain.net' cmd.run "su - \`grep -m 1 '.*s2adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select A1.PROGNAME, A1.ACTIVE, A1.RFCDEST, B1.RFCOPTIONS FROM SLDAGADM AS A1 LEFT JOIN RFCDES AS B1 ON A1.RFCDEST=B1.RFCDEST WHERE A1.PROGNAME NOT LIKE '\''_SLD%'\'';\"'"
+
+
+
+========================================
+==========> ABAP SMTP SCOT Configuration
+========================================
+
+
+HANA-based
+salt -L 'HOST002.domain.net,HOST012.domain.net,HOST059.domain.net,HOST016.domain.net,HOST064.domain.net,HOST070.domain.net,HOST072,HOST044.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select * from SXNODES;\"'"
+
+ASE-based
+salt -L 'HOST033.domain.net, HOST034.domain.net, HOST035.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'echo \"SET NOCOUNT ON\" > /tmp/temporaryfileSAP && echo \"select * into foo# from SXNODES\" >> /tmp/temporaryfileSAP && echo \"execute sp_autoformat foo#\" >> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && echo \"drop table foo#\">> /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && isql -s \";\" -k sapsr3 -w999 -X -i /tmp/temporaryfileSAP | sed -e '\''s/; */;/g'\'' -e '\''s/ *;/;/g'\'' |grep -v \"-\" && rm /tmp/temporaryfileSAP'"
+
+Solman-specific
+salt -L 'HOST007.domain.net,HOST038.domain.net' cmd.run "su - \`grep -m 1 '.*s2adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select * from SXNODES;\"'"
+
+
+====================================
+==========> JAVA MEMORY DISTRIBUTION
+====================================
+
+serverX node count
+ps -ef|egrep -e '_server[0-9]'|wc -l
+
+grep Xmx /usr/sap/???/J??/j2ee/cluster/instance.properties |awk '{ print $1 }' |sed 's/.JavaParameters=-Xmx/ /g'
+
+
+salt -L 'HOST005.domain.net, HOST015.domain.net, HOST021.domain.net, HOST062.domain.net, HOST066.domain.net, HOST071.domain.net, HOST077.domain.net, HOST038.domain.net, HOST007.domain.net' cmd.run "grep Xmx /usr/sap/???/J??/j2ee/cluster/instance.properties |awk '{ print \$1 }' |sed 's/.JavaParameters=-Xmx/;/g'|sed 's/m/ MB/g'"
+
+
+
+=======================================
+==========> HANA Password policies
+=======================================
+
+HANA-based
+salt -L 'HOST002.domain.net,HOST012.domain.net,HOST059.domain.net,HOST016.domain.net,HOST064.domain.net,HOST070.domain.net,HOST072,HOST044.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select * from M_PASSWORD_POLICY order by property\"'"
+
+Solman-specific
+salt -L 'HOST007.domain.net,HOST038.domain.net' cmd.run "su - \`grep -m 1 '.*s2adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select * from M_PASSWORD_POLICY order by property\"'"
+
+
+=======================================
+==========> HANA Audit Parameters
+=======================================
+
+HANA-based
+salt -L 'HOST002.domain.net,HOST012.domain.net,HOST059.domain.net,HOST016.domain.net,HOST064.domain.net,HOST070.domain.net,HOST072,HOST044.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select * from M_INIFILE_CONTENTS where key like '\''%auditing%'\'';\"'"
+
+Solman-specific
+salt -L 'HOST007.domain.net,HOST038.domain.net' cmd.run "su - \`grep -m 1 '.*s2adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select * from M_INIFILE_CONTENTS where key like '\''%auditing%'\'';\"'"
+
+
+=======================================
+==========> HANA Audit Policies
+=======================================
+
+HANA-based
+salt -L 'HOST002.domain.net,HOST012.domain.net,HOST059.domain.net,HOST016.domain.net,HOST064.domain.net,HOST070.domain.net,HOST072,HOST044.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select * from AUDIT_POLICIES;\"'"
+
+Solman-specific
+salt -L 'HOST007.domain.net,HOST038.domain.net' cmd.run "su - \`grep -m 1 '.*s2adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select * from AUDIT_POLICIES;\"'"
+
+
+=======================================
+==========> ASE Password policies
+=======================================
+
+Pre-requisites as <sid>adm:
+	- we need to create an aseuserstore entry named "sapsr3"
+	-- For ABAP
+		aseuserstore set sapsso `hostname`:4901 sapsso <pass>
+	-- For JAVA
+		aseuserstore set sapsso `hostname`:4901 SAPSR3DB <pass>
+	-- For BOBJ
+		aseuserstore set sapsso `hostname`:5000 sa <pass>
+
+	*Note: special characters need to be escaped. i.e. "!" or \$
+
+Netweaver-based
+salt -L 'HOST033.domain.net, HOST034.domain.net, HOST035.domain.net, HOST005.domain.net, HOST015.domain.net, HOST062.domain.net, HOST021.domain.net, HOST066.domain.net, HOST071.domain.net, HOST077.domain.net' cmd.run "su - \`grep -m 1 '.*adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'echo \"sp_passwordpolicy list\" > /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && isql -s \";\" -k sapsso -w999 -X -i /tmp/temporaryfileSAP && rm /tmp/temporaryfileSAP'"
+
+Non-netweaver based -> BOBJ
+salt -L 'HOST006.domain.net, HOST013.domain.net' cmd.run "su - \`grep -m 1 '.*d1adm' /etc/passwd| awk -F\":\" '{ print \$1 }'\` -c 'echo \"sp_passwordpolicy list\" > /tmp/temporaryfileSAP && echo \"go\" >> /tmp/temporaryfileSAP && isql -s \";\" -k sapsso -w999 -X -i /tmp/temporaryfileSAP && rm /tmp/temporaryfileSAP'"
+
+
+
+
+HOST033:dg1adm 64> isql -k sapsso -w999 -X -i /tmp/temporaryfileSAP
+1> sp_passwordpolicy list
+2> go
+ Policy_option                  Curr_value                     Min_value   Max_value
+ ------------------------------ ------------------------------ ----------- -----------
+ rsa keysize                    2048                                  1024        4096
+ disallow simple passwords      1                                        0           1
+ min digits in password         1                                       -1          16
+ min alpha in password          2                                       -1          16
+ min upper char in password     1                                       -1          16
+ min lower char in password     1                                       -1          16
+ password exp warn interval     30                                       0         365
+ minimum password length        8                                        0          30
+ maximum failed logins          7                                       -1       32767
+
+(9 rows affected)
+(return status = 0)
+1>
+
+isql -k SAPSSO -iscript
+
+-> script
+sp_passwordpolicy list
+go
+
