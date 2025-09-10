@@ -282,22 +282,6 @@ function_restart(){
     fi
 }
 
-
-# function_start(){
-#     length=${#sap_instances_array[@]}
-#     for (( i=0; i<(${length}); i+=5 ));
-#     do 
-#         sid_lower=${sap_instances_array[$i],,}
-#         su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -host ${sap_instances_array[$i+4]} -function GetProcessList" >> /dev/null
-#         # Check the result and output accordingly
-#         if ! [[ $? -eq 3 ]]; then
-#             #echo "Result for SID: $sid Instance Number: $instance_number is not 3"
-#             echo -e "${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}"
-#             su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -host ${sap_instances_array[$i+4]} -function Start"
-#         fi
-#         echo "=================================="
-#     done
-# }
 # Check if the number of arguments is correct
 if [ "$#" -lt 1 ]; then
     echo "Usage: $0 command options"
