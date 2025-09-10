@@ -51,7 +51,7 @@ function_list(){
         function_list_in(){
             echo "${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}"
         }
-        if [[ "$1" = "all" || "$1" = "None" || ! -z "$1" ]]; then
+        if [[ "$1" = "all" || "$1" = "None" ]]; then
             function_list_in
         else
             if [ "$1" = "${sap_instances_array[$i]}" ]; then
@@ -68,7 +68,7 @@ function_status(){
         # echo "Array length: $length"
         for (( i=0; i<(${length}); i+=5 ));
         do 
-            if [ "$2" = "all" ]; then
+            if [[ "$2" = "all" || "$1" = "None" ]]; then
                 sid_lower=${sap_instances_array[$i],,}
                 su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function GetProcessList" >> /dev/null
                 echo -e "${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}"
@@ -156,7 +156,7 @@ function_status(){
         length=${#sap_instances_array[@]}
         for (( i=0; i<(${length}); i+=5 ));
         do 
-            if [ "$1" = "all" ]; then
+            if [[ "$1" = "all" || "$1" = "None" ]]; then
                 sid_lower=${sap_instances_array[$i],,}
                 su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function GetProcessList" >> /dev/null
                 result="$?"
@@ -169,7 +169,7 @@ function_status(){
                 elif  [[ "$result" = "3" ]]; then 
                     echo "RUNNING - ${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}"  
                 fi
-        else
+            else
             if [ "$1" = "${sap_instances_array[$i]}" ]; then
                 sid_lower=${sap_instances_array[$i],,}
                 su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function GetProcessList" >> /dev/null
@@ -184,7 +184,7 @@ function_status(){
                     echo "RUNNING - ${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}"  
                 fi
             fi
-        fi
+            fi
         done
         exit $overall_exit_status  # Exit with the overall status
     fi
@@ -193,9 +193,11 @@ function_status(){
 
 function_version(){
     length=${#sap_instances_array[@]}
+    instance_found=0
     for (( i=0; i<(${length}); i+=5 ));
     do 
-        if [ "$1" = "all" ]; then
+        if [[ "$1" = "all" || "$1" = "None" ]]; then
+            instance_found=1
             echo -e "${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}"
             sid_lower=${sap_instances_array[$i],,}
             su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function GetVersionInfo"           
@@ -209,6 +211,9 @@ function_version(){
         fi
         echo "=================================="
     done
+    if [ "$instance_found" = "0" ]; then
+        echo "Instance $1 not found"
+    fi
 }
 
 function_stop(){
@@ -285,7 +290,7 @@ function_restart(){
 # Check if the number of arguments is correct
 if [ "$#" -lt 1 ]; then
     echo "Usage: $0 command options"
-    echo "command can be: list, profiles, status, version, stop, start or restart"
+    echo "Error: 'command' must be 'list', 'status', 'version', 'profiles', 'stop', 'start' or 'restart'"
     echo "option specifications depend on command"
     exit 1
 fi
