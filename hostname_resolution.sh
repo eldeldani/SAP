@@ -24,14 +24,14 @@ compare_resolutions() {
 
     if [ -n "$dns_ips" ]; then
         echo "DNS $host: $dns_ips"
-    # else
-        # echo "DNS resolution for $host failed or not found."
+    else
+        echo "DNS resolution for $host failed or not found."
     fi
 
     if [ -n "$hosts_ips" ]; then
         echo "/etc/hosts $host: $hosts_ips"
-    # else
-        # echo "/etc/hosts resolution for $host not found."
+    else
+        echo "/etc/hosts resolution for $host not found."
     fi
 
     # Compare each DNS IP with /etc/hosts IPs
@@ -45,7 +45,7 @@ compare_resolutions() {
     if [ "$mismatch_found" = true ]; then
         echo "====== Resolution mismatch for $host!"
     # else
-        # echo "Resolution matches for $host."
+    #     echo "Resolution matches for $host."
     fi
 }
 
@@ -63,9 +63,10 @@ if [ ! -f "$filename" ]; then
     exit 1
 fi
 
+
 # Read hosts from file and compare resolutions
-while IFS= read -r host; do
+egrep -Ev '^#|localhost|arvato' $filename | while IFS= read -r host; do
     if [ -n "$host" ]; then
         compare_resolutions "$host"
     fi
-done < "$filename"
+done
