@@ -84,6 +84,7 @@ if [ $action == "check" ]; then
  else
   echo ">> xandria/avantra group in /etc/group: NOT FOUND"
  fi
+
  sysmanager1=$([[ -L "/sbin/init" ]] && echo 'systemd' || echo 'SysV')
  echo ">> "$sysmanager1 "detected as system manager"
  if [ "$sysmanager1" = "systemd" ]; then
@@ -94,6 +95,48 @@ if [ $action == "check" ]; then
    cat /etc/sudoers|egrep -i 'xandria|avantra'
   else
    echo ">> sudoers entries in /etc/sudoers: NOT FOUND"
+  fi
+  SERVICE_FILE="/etc/systemd/system/avantra-agent.service"
+  EXPECTED_PERMS="755"
+  read -r -d '' EXPECTED_CONTENT <<'EOF'
+[Unit]
+Description=Avantra Agent
+After=network.target
+[Service]
+# Or change to the path where the Avantra Agent is installed
+ExecStart=/opt/syslink/agent/rc.agent start
+# Or change to the path where the Avantra Agent is installed
+ExecStop=/opt/syslink/agent/rc.agent stop
+# The user running the agent:
+User=avantra
+Type=forking
+# The kill mode must be set to "process" to prevent the automatic
+# agent update from being stopped together with the parent
+# agent process.
+KillMode=process
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  if [ -f "$SERVICE_FILE" ]; then
+      ACTUAL_PERMS=$(stat -c "%a" "$SERVICE_FILE")
+      if [ "$ACTUAL_PERMS" = "$EXPECTED_PERMS" ]; then
+          echo "$SERVICE_FILE has $EXPECTED_PERMS permissions."
+      else
+          echo "$SERVICE_FILE has $ACTUAL_PERMS permissions (expected $EXPECTED_PERMS)."
+      fi
+
+    # Compare contents
+      DIFF=$(diff -u <(echo "$EXPECTED_CONTENT") "$SERVICE_FILE")
+      if [ -z "$DIFF" ]; then
+          echo "$SERVICE_FILE content matches exactly."
+      else
+          echo "$SERVICE_FILE content does NOT match exactly."
+          # Uncomment next line to show the diff
+          # echo "$DIFF"
+      fi
+  else
+      echo "$SERVICE_FILE does NOT exist."
   fi
  fi
  if [ "$sysmanager1" = "SysV" ]; then
