@@ -38,10 +38,13 @@ while IFS= read -r line; do
     fi
 done < "/usr/sap/sapservices"  # Replace "your_file.txt" with the actual filename
 
+
 # SID: ${sap_instances_array[$i]}
 # INSTANCE_TYPE: ${sap_instances_array[$i+2]}
 # SN: ${sap_instances_array[$i+3]}
 # HOSTNAME: ${sap_instances_array[$i+4]}
+
+
 
 # Functions 
 function_list(){
