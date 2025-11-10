@@ -290,6 +290,74 @@ function_restart(){
     fi
 }
 
+function_statusdb(){
+    if [ "$1" = "all" ]; then
+        /usr/sap/hostctrl/exe/saphostctrl -function ListDatabases
+    elif [ -z "$2" ]; then
+        echo "Error: Database type argument is missing: syb or hdb"
+        echo "Usage: $0 statusdb <SID> <dbtype>"
+        exit 1
+    else
+        /usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname $1 -dbtype $2
+        if [ ! $? -eq 0 ]; then
+            echo "=== Error executing command"
+        fi
+    fi
+}
+
+function_stopdb(){
+    if [ -z "$2" ]; then
+        echo "Error: Database type argument is missing: syb or hdb"
+        echo "Usage: $0 stopdb <SID> <dbtype>"
+        exit 1
+    fi
+    echo "Stopping database $1 of type $2..."
+    /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $1 -dbtype $2
+    if [ $? -eq 0 ]; then
+        echo "=== Database $1 stopped successfully."
+    else
+        echo "=== Failed to stop database $1. Trying with force option..."
+        /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $1 -dbtype $2 -force
+        if [ $? -eq 0 ]; then
+            echo "=== Database $1 stopped successfully with force option."
+        else
+            echo "=== Failed to stop database $1 even with force option."
+        fi
+    fi
+    echo "=== Checking database $1 status..."
+    /usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname $1 -dbtype $2
+}
+
+function_startdb(){
+    if [ -z "$2" ]; then
+        echo "Error: Database type argument is missing: syb or hdb"
+        echo "Usage: $0 startdb <SID> <dbtype>"
+        exit 1
+    fi
+    echo "=== Starting database $1 of type $2..."
+    /usr/sap/hostctrl/exe/saphostctrl -function StartDatabase -dbname $1 -dbtype $2
+    if [ $? -eq 0 ]; then
+        echo "=== Database $1 started successfully."
+    else
+        echo "=== Failed to start database $1."
+    fi
+    echo "=== Checking database $1 status..."
+    /usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname $1 -dbtype $2
+}
+
+function_restartdb(){
+    if [ -z "$2" ]; then
+        echo "Error: Database type argument is missing: syb or hdb"
+        echo "Usage: $0 restartdb <SID> <dbtype>"
+        exit 1
+    fi
+    echo "=== Restarting database $1 of type $2..."
+    echo "=== Stopping database $1..."
+    function_stopdb $1 $2
+    echo "=== Starting database $1..."
+    function_startdb $1 $2
+}
+
 # Check if the number of arguments is correct
 if [ "$#" -lt 1 ]; then
     echo "Usage: $0 command options"
@@ -334,8 +402,20 @@ case $arg1 in
     restart)
         function_restart $arg2
         ;;
+    statusdb)
+        function_statusdb $arg2 $arg3
+        ;;
+    stopdb)
+        function_stopdb $arg2 $arg3
+        ;;
+    startdb)
+        function_startdb $arg2 $arg3
+        ;;
+    restartdb)
+        function_restartdb $arg2 $arg3
+        ;;
     *)
-        echo "Error: 'command' must be 'list', 'status', 'version', 'profiles', 'stop', 'start' or 'restart'"
+        echo "Error: 'command' must be 'list', 'status', 'version', 'profiles', 'stop', 'start', 'statusdb', 'stopdb' , 'startdb' or 'restart'"
         exit 1
         ;;
-esac
+esac           
