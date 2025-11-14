@@ -418,4 +418,4 @@ case $arg1 in
         echo "Error: 'command' must be 'list', 'status', 'version', 'profiles', 'stop', 'start', 'statusdb', 'stopdb' , 'startdb' or 'restart'"
         exit 1
         ;;
-esac           
+esac
