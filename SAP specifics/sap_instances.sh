@@ -47,9 +47,16 @@ done < "/usr/sap/sapservices"  # Replace "your_file.txt" with the actual filenam
 
 
 # Functions 
-funcion_identify_dbtype(){
+funcion_identify_db(){
     dboutput=$("/usr/sap/hostctrl/exe/saphostctrl -function ListDatabases")
-    dbtype=$(echo "$dboutput" | grep -i "$1" | awk '{print $3}')
+    if [[ $dboutput == "No databases found" ]]; then
+        echo 1
+    else
+        dbinstance=$(echo "$dboutput" | grep -i instance | awk -F', *' '{print $1}' | awk -F': *' '{print $2}')
+        dbtype=$(echo "$dboutput" | grep -i type | awk -F', *' '{print $1}' | awk -F': *' '{print $2}')
+        dbname=$(echo "$dboutput" | grep -i "database name" | awk -F', *' '{print $1}' | awk -F': *' '{print $2}')
+
+    fi
 }
 
 
