@@ -47,6 +47,12 @@ done < "/usr/sap/sapservices"  # Replace "your_file.txt" with the actual filenam
 
 
 # Functions 
+funcion_identify_dbtype(){
+    dboutput=$("/usr/sap/hostctrl/exe/saphostctrl -function ListDatabases")
+    dbtype=$(echo "$dboutput" | grep -i "$1" | awk '{print $3}')
+}
+
+
 function_list(){
     length=${#sap_instances_array[@]}
     for (( i=0; i<(${length}); i+=5 ));
@@ -61,7 +67,6 @@ function_list(){
                 function_list_in
             fi
         fi
-        
     done
 }
 
