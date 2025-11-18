@@ -13,9 +13,10 @@
 #           binary: returns 0 if all instances are running or 1 otherwise.
 #           detail: returns sapcontrol output command for every instance
 
+
+# # Load SAP instances data from /usr/sap/sapservices and match with /usr/sap/<SID>/SYS/profile/<PROFILE> 
 declare -a hostname_array
 declare -a sap_instances_array
-# Read each line from the file
 while IFS= read -r line; do
     # Use a regular expression to extract the required part
     if [[ $line != \#* && $line =~ /usr/sap/([a-zA-Z0-9]{3})/SYS/profile/([a-zA-Z0-9]{3,5})_(D|DVEBMGS|ASCS|SCS|J|SMDA|HDB)([0-9]{2})_([a-zA-Z0-9]{1,13}) ]]; then
@@ -61,7 +62,6 @@ function_db_type(){
         fi
     fi
 }
-
 function_db_status(){
     local db_name="${1^^}"
     if [[ -z "$db_name" || "$db_name" = "all" ]]; then
@@ -498,17 +498,6 @@ case $arg1 in
         # 'list' requires no specific command, so it's valid
         function_instance_list $arg2
         ;;
-    instance_profiles)
-        # 'profiles' requires an additional argument: parameter
-        if [[ "$arg2" == "parameter" ]]; then
-            echo "'command': 'profiles' is valid with 'option': 'parameter'."
-            echo "Functionality not yet implemented."
-            # Here you would call the function to handle profiles and parameters
-        else
-            echo "Error: command must be 'parameter' when arg1 is 'profiles'."
-            exit 1
-        fi
-        ;;
     instance_status)
         function_instance_status $arg2 $arg3
         ;;
@@ -570,7 +559,7 @@ case $arg1 in
         function_all_start $arg
         ;;
     *)
-        echo "Error: 'command' must be 'instance_list', 'instance_status', 'instance_version', 'instance_profiles', 'instance_stop', 'instance_start', 'db_status', 'db_stop' , 'db_start' or 'db_restart'"
+        echo "Error: 'command' must be 'instance_list', 'instance_status', 'instance_version', 'instance_stop', 'instance_start', 'instance_restart', 'db_status', 'db_stop', 'db_start', 'db_restart', 'db_type', 'all_stop' or 'all_start'"
         exit 1
         ;;
 esac
