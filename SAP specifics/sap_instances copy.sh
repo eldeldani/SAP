@@ -1,20 +1,10 @@
 #!/bin/bash
 # SAP instance lookup tool for any host
 # Created by Daniel Munoz
-# Usage:
-# sap_instances.sh <command> <option>
-# <command>:
-#   list: Lists Available SAP instances in host. Configured in /usr/sap/sapservices
-#   profiles: Lists available profiles
-#        <option>:
-#           parameter: returns value for given parameter for every instance, including default
-#   status: Checks SAP instances status in the host
-#       <option>
-#           binary: returns 0 if all instances are running or 1 otherwise.
-#           detail: returns sapcontrol output command for every instance
-
-
-# # Load SAP instances data from /usr/sap/sapservices and match with /usr/sap/<SID>/SYS/profile/<PROFILE> 
+# For usage information, run:
+# sap_instances.sh help 
+# sap_instances.sh <command> [<option>]
+# Load SAP instances data from /usr/sap/sapservices and match with /usr/sap/<SID>/SYS/profile/<PROFILE> into array sap_instances_array
 declare -a hostname_array
 declare -a sap_instances_array
 while IFS= read -r line; do
@@ -37,7 +27,29 @@ while IFS= read -r line; do
     fi
 done < "/usr/sap/sapservices"
 
-
+# DISPLAY HELP FUNCTION
+function_display_help(){
+    echo "Usage: $0 <command> [<option>]"
+    echo "  <command> must be one of the following:"
+    echo "  - instance_list: does not require an optional 'option' parameter, it could be instance SID or empty for all."
+    echo "  - instance_status: does not require an optional 'option' if empty, will list status for all instances. If 'detail' is provided as 'option', detailed status will be shown. If instance SID is provided as 'option', status for that specific instance will be shown."
+    echo "  - instance_version: does not require an optional 'option' if empty, will list version for all instances. If instance SID is provided as 'option', version for that specific instance will be shown."
+    echo "  - instance_stop: requires an 'option' parameter (instance SID or 'all')."
+    echo "  - instance_start: requires an 'option' parameter (instance SID or 'all')."
+    echo "  - instance_restart: requires an 'option' parameter (instance SID or 'all')."
+    echo "  - db_status does not require an optional 'option' parameter, it could be database name or empty for all."
+    echo "  - db_stop requires an 'option' parameter (database name),"
+    echo "  - db_start requires an 'option' parameter (database name),"
+    echo "  - db_restart requires an 'option' parameter (database name),"
+    echo "  - db_type requires an 'option' parameter (database name). Will return the database type for the given database name."
+    echo "  - db_type can be: "
+    echo "      hdb - SAP HANA Database"
+    echo "      ora - Oracle Database"
+    echo "      syb - SAP ASE (Sybase) Database"
+    echo "      ada - MaxDB Database"
+    echo "  - all_stop does not require any parameters. Will stop all SAP instances and associated databases on the host."
+    echo "  - all_start does not require any parameters. Will start all SAP instances and associated databases on the host."
+}
 # DATABASE FUNCTIONS
 function_db_type(){
     local db_name="${1^^}"
@@ -447,7 +459,6 @@ function_all_stop(){
         fi
     done
 }
-
 function_all_start(){
     local length=${#sap_instances_array[@]}
     # For every instance check if we have a valid database in the host and start it
@@ -477,13 +488,12 @@ function_all_start(){
         exit 1
     fi
 }
+
 ## Main script logic
 # Check if the number of arguments is correct
-if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 command options"
-    echo "Error: 'command' must be 'list', 'status', 'version', 'profiles', 'stop', 'start' or 'restart'"
-    echo "option specifications depend on command"
-    exit 1
+if [ "$#" -lt 1 ] || [ "$1" = "help" ]; then
+    function_display_help
+    exit 0
 fi
 
 # Assign arguments to variables
@@ -495,7 +505,6 @@ arg4=$4
 # Validate arg1 and command
 case $arg1 in
     instance_list)
-        # 'list' requires no specific command, so it's valid
         function_instance_list $arg2
         ;;
     instance_status)
@@ -507,6 +516,7 @@ case $arg1 in
     instance_stop)
         if [[ -z "$arg2" ]]; then
             echo "Error: 'option' is required for 'instance_stop' command."
+            function_display_help
             exit 1
         fi
         function_instance_stop $arg2
@@ -514,6 +524,7 @@ case $arg1 in
     instance_start)
         if [[ -z "$arg2" ]]; then
             echo "Error: 'option' is required for 'instance_start' command."
+            function_display_help
             exit 1
         fi
         function_instance_start $arg2
@@ -521,6 +532,7 @@ case $arg1 in
     instance_restart)
         if [[ -z "$arg2" ]]; then
             echo "Error: 'option' is required for 'instance_restart' command."
+            function_display_help
             exit 1
         fi
         function_instance_restart $arg2
@@ -531,6 +543,7 @@ case $arg1 in
     db_stop)
         if [[ -z "$arg2" ]]; then
             echo "Error: 'option' is required for 'db_stop' command."
+            function_display_help
             exit 1
         fi
         function_db_stop $arg2
@@ -538,6 +551,7 @@ case $arg1 in
     db_start)
         if [[ -z "$arg2" ]]; then
             echo "Error: 'option' is required for 'db_start' command."
+            function_display_help
             exit 1
         fi
         function_db_start $arg2
@@ -545,6 +559,7 @@ case $arg1 in
     db_restart)
         if [[ -z "$arg2" ]]; then
             echo "Error: 'option' is required for 'db_restart' command."
+            function_display_help
             exit 1
         fi
         function_db_restart $arg2
@@ -553,13 +568,14 @@ case $arg1 in
         function_db_type $arg2
         ;;
     all_stop)
-        function_all_stop $arg2
+        function_all_stop
         ;;
     all_start)
-        function_all_start $arg
+        function_all_start
         ;;
     *)
         echo "Error: 'command' must be 'instance_list', 'instance_status', 'instance_version', 'instance_stop', 'instance_start', 'instance_restart', 'db_status', 'db_stop', 'db_start', 'db_restart', 'db_type', 'all_stop' or 'all_start'"
+        function_display_help
         exit 1
         ;;
 esac
