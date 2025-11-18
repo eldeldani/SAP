@@ -13,13 +13,11 @@
 #           binary: returns 0 if all instances are running or 1 otherwise.
 #           detail: returns sapcontrol output command for every instance
 
-# Load SAP instances data from /usr/sap/sapservices
 declare -a hostname_array
 declare -a sap_instances_array
 # Read each line from the file
 while IFS= read -r line; do
     # Use a regular expression to extract the required part
-    # if [[ $line =~ (\/usr\/sap\/)([a-zA-Z0-9]{3})*([a-zA-Z0-9]{3,5})_(D|DVEBMGS|ASCS|SCS|J|SMDA)([0-9]{2})_([a-zA-Z0-9]{1,13}) ]]; then
     if [[ $line != \#* && $line =~ /usr/sap/([a-zA-Z0-9]{3})/SYS/profile/([a-zA-Z0-9]{3,5})_(D|DVEBMGS|ASCS|SCS|J|SMDA|HDB)([0-9]{2})_([a-zA-Z0-9]{1,13}) ]]; then
         SID=${BASH_REMATCH[1]}
         PROFSTRT=${BASH_REMATCH[2]}
@@ -36,17 +34,10 @@ while IFS= read -r line; do
         hostname="${SID} ${PROFSTRT}_${INSTANCE_TYPE}${SN}_${VHOSTNAME}"
         hostname_array+=("$hostname")
     fi
-done < "/usr/sap/sapservices"  # Replace "your_file.txt" with the actual filename
-
-
-# SID: ${sap_instances_array[$i]}
-# INSTANCE_TYPE: ${sap_instances_array[$i+2]}
-# SN: ${sap_instances_array[$i+3]}
-# HOSTNAME: ${sap_instances_array[$i+4]}
+done < "/usr/sap/sapservices"
 
 
 # DATABASE FUNCTIONS
-# Database type identification 
 function_db_type(){
     local db_name="${1^^}"
     # Ensure the hostctrl binary exists and is executable
@@ -71,7 +62,6 @@ function_db_type(){
     fi
 }
 
-# Get database status
 function_db_status(){
     local db_name="${1^^}"
     if [[ -z "$db_name" || "$db_name" = "all" ]]; then
@@ -94,7 +84,6 @@ function_db_status(){
         fi
     fi
 }
-# Stop database
 function_db_stop(){
     local db_name="${1^^}"
     local db_type
@@ -121,7 +110,6 @@ function_db_stop(){
     echo "=== Checking database $db_name status..."
     /usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname "$db_name" -dbtype $db_type
 }
-# Start database
 function_db_start(){
     local db_name="${1^^}"
     local db_type
@@ -142,7 +130,6 @@ function_db_start(){
     echo "=== Checking database $db_name status..."
     /usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname $db_name -dbtype $db_type
 }
-# Restart database
 function_db_restart(){
     local db_name="${1^^}"
     if ! function_db_stop $db_name; then
@@ -153,6 +140,7 @@ function_db_restart(){
         exit 1
     fi
 }
+# SAP INSTANCE FUNCTIONS
 function_instance_list(){
     local length=${#sap_instances_array[@]}
     for (( i=0; i<(${length}); i+=5 ));
