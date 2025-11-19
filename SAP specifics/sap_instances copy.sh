@@ -10,11 +10,15 @@
 
 # DECLARE ARRAYS AND VARIABLES
 declare -a sap_instances_array
-declare -a db_instances_array
+declare -a non_hdb_instances_array
+declare -a hdb_instances_array
 declare sap_instances_found=0
 declare saprouter_instance_found=0
-declare db_instances_found=0
+declare non_hdb_instances_found=0
+declare hdb_instances_found=0
 declare saprouter_instance_found=0
+declare SAPROUTER_INFO_FILE="/tmp/saprouter_info.txt"
+declare SAPROUTER_STOPPED_WITH_SCRIPT="/tmp/saprouter_stopped_with_script.txt"
 
 function_find_sap_instances(){
     if ! [ -f /usr/sap/sapservices ]; then
@@ -42,22 +46,51 @@ function_find_sap_instances(){
         done < "/usr/sap/sapservices"
     fi
 }
-function_find_db_instances(){
+function_find_non_hdb_instances(){
     if ! [ -x "/usr/sap/hostctrl/exe/saphostctrl" ]; then
         # echo "Error: /usr/sap/hostctrl/exe/saphostctrl not found or not executable. Can not detect database instances."
         return 1
     else
+        # capture full command output (stdout+stderr) without printing it
+        local raw_db_output
+        raw_db_output=$(/usr/sap/hostctrl/exe/saphostctrl -function ListDatabaseSystems 2>&1)
+
+        # keep the filtered lines used by the script, stored in db_list_output
         local db_list_output
-        db_list_output=$(/usr/sap/hostctrl/exe/saphostctrl -function ListDatabaseSystems | grep "Database name")
+        db_list_output=$(printf "%s" "$raw_db_output" | grep "Database name" | grep -v "hdb")
         if [[ -z "$db_list_output" ]]; then 
             # echo "No database instances found."
             return 1
         else
             while IFS= read -r line; do
                 db_sid=$(echo "$line" | awk -F', ' '{print $1}' | awk '{print $3}')
-                db_instances_array+=("$db_sid")
+                non_hdb_instances_array+=("$db_sid")
             done <<< "$db_list_output"
-            db_instances_found=1
+            non_hdb_instances_found=1
+        fi
+    fi
+}
+function_find_hdb_instances(){
+    if ! [ -x "/usr/sap/hostctrl/exe/saphostctrl" ]; then
+        # echo "Error: /usr/sap/hostctrl/exe/saphostctrl not found or not executable. Can not detect database instances."
+        return 1
+    else
+        # capture full command output (stdout+stderr) without printing it
+        local raw_db_output
+        raw_db_output=$(/usr/sap/hostctrl/exe/saphostctrl -function ListDatabaseSystems 2>&1)
+
+        # keep the filtered lines used by the script, stored in db_list_output
+        local db_list_output
+        db_list_output=$(printf "%s" "$raw_db_output" | grep "Database name" | grep "hdb")
+        if [[ -z "$db_list_output" ]]; then 
+            # echo "No HANA database instances found."
+            return 1
+        else
+            while IFS= read -r line; do
+                db_sid=$(echo "$line" | awk -F', ' '{print $1}' | awk '{print $3}')
+                hdb_instances_array+=("$db_sid")
+            done <<< "$db_list_output"
+            hdb_instances_found=1
         fi
     fi
 }
@@ -87,26 +120,30 @@ function_display_help(){
 }
 # DATABASE FUNCTIONS
 function_db_list(){
-    if ! [ "$db_instances_found" -eq 1 ]; then
+    if [ "$non_hdb_instances_found" -eq 0 ] && [ "$hdb_instances_found" -eq 0 ]; then
         echo "No database instances found."
         return 1
-    else
-        for db_sid in "${db_instances_array[@]}"; do
+    elif [ "$hdb_instances_found" -eq 1 ]; then
+        for db_sid in "${hdb_instances_array[@]}"; do
             echo "$db_sid"
+        done
+    elif [ "$non_hdb_instances_found" -eq 1 ]; then
+        for non_hdb_sid in "${non_hdb_instances_array[@]}"; do
+            echo "$non_hdb_sid"
         done
     fi
 }   
 function_db_type(){
-    if ! [ "$db_instances_found" -eq 1 ]; then
-        echo "No database instances found."
+    if ! [ "$non_hdb_instances_found" -eq 1 ]; then
+        echo "No non-HANA database instances found."
         return 1
     else
         local db_name="${1^^}"
         if [[ -z "$db_name" || ${#db_name} -ne 3 ]]; then
             echo "Error: Database name not supplied or not having exactly 3 characters"
             return 1
-        elif ! [ "$db_instances_found" -eq 1 ]; then
-            echo "Error: No database instances found."
+        elif ! [ "$non_hdb_instances_found" -eq 1 ]; then
+            echo "Error: No non-HANA database instances found."
             return 1
         else
             local dboutput=$(/usr/sap/hostctrl/exe/saphostctrl -function ListDatabaseSystems |grep -v SYSTEMDB|grep "Database name: ${db_name}")
@@ -124,15 +161,15 @@ function_db_type(){
 
 }
 function_db_status(){
-    if ! [ "$db_instances_found" -eq 1 ]; then
-        echo "No database instances found."
+    if ! [ "$non_hdb_instances_found" -eq 1 ]; then
+        echo "No non-HANA database instances found."
     return 1
     else
         local db_name="${1^^}"
         if [[ -z "$db_name" || "$db_name" = "ALL" ]]; then
             /usr/sap/hostctrl/exe/saphostctrl -function ListDatabaseSystems|grep "Database name"
-        elif ! [ "$db_instances_found" -eq 1 ]; then
-            echo "Error: No database instances found."
+        elif ! [ "$non_hdb_instances_found" -eq 1 ]; then
+            echo "Error: No non-HANA database instances found."
             return 1
         elif [[ ${#db_name} -ne 3 ]]; then
                 echo "Error: Database name not having exactly 3 characters"
@@ -154,8 +191,8 @@ function_db_status(){
 function_db_stop(){
     local db_name="${1^^}"
     local db_type
-    if ! [ "$db_instances_found" -eq 1 ]; then
-        echo "No database instances found."
+    if ! [ "$non_hdb_instances_found" -eq 1 ]; then
+        echo "No non-HANA database instances found."
         return 1
     elif [[ "$db_name" = "ALL" ]]; then
         for sid in "${db_instances_array[@]}"; do
@@ -197,8 +234,8 @@ function_db_stop(){
 function_db_start(){
     local db_name="${1^^}"
     local db_type
-    if ! [ "$db_instances_found" -eq 1 ]; then
-        echo "No database instances found."
+    if ! [ "$non_hdb_instances_found" -eq 1 ]; then
+        echo "No non-HANA database instances found."
         return 1
     elif [[ "$db_name" = "ALL" ]]; then
         for sid in "${db_instances_array[@]}"; do
@@ -428,9 +465,9 @@ function_instance_stop(){
     else
         local length=${#sap_instances_array[@]}
         local instance_found=0
-        # First pass: Stop the instances not being SCS or ASCS
+        # First pass: Stop the instances not being SCS, ASCS, or HDB
         for (( i=0; i<(${length}); i+=5 )); do 
-            if [[ "${sap_instances_array[$i+2]}" != "SCS" && "${sap_instances_array[$i+2]}" != "ASCS" ]]; then
+            if [[ "${sap_instances_array[$i+2]}" != "SCS" && "${sap_instances_array[$i+2]}" != "ASCS" && "${sap_instances_array[$i+2]}" != "HDB" ]]; then
                 if [ "$1" = "all" ]; then
                     echo -e "Stopping ==> ${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}"
                     local sid_lower=${sap_instances_array[$i],,}
@@ -453,7 +490,7 @@ function_instance_stop(){
             fi
         done
         
-        # Second pass: Stop instances with SCS or ASCS
+        # Second pass: Stop instances with SCS, ASCS
         for (( i=0; i<(${length}); i+=5 )); do 
             if [[ "${sap_instances_array[$i+2]}" == "SCS" || "${sap_instances_array[$i+2]}" == "ASCS" ]]; then
                 if [ "$1" = "all" ]; then
@@ -477,6 +514,32 @@ function_instance_stop(){
                 fi
             fi
         done
+
+        # Third pass: Stop instances with HDB
+        for (( i=0; i<(${length}); i+=5 )); do 
+            if [[ "${sap_instances_array[$i+2]}" == "HDB" ]]; then
+                if [ "$1" = "all" ]; then
+                    echo -e "Stopping ==> ${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}"
+                    local sid_lower=${sap_instances_array[$i],,}
+                    echo "command: su - ${sid_lower}adm -c sapcontrol -nr ${sap_instances_array[$i+3]} -function Stop"
+                    # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function Stop"
+                    if [ $? -ne 0 ]; then
+                        echo "=== Error stopping instance ${sap_instances_array[$i]}_${sap_instances_array[$i+1]}${sap_instances_array[$i+2]}_${sap_instances_array[$i+3]}"
+                    fi
+                    instance_found=1
+                elif [ "$1" = "${sap_instances_array[$i]}" ]; then
+                    echo -e "Stopping ==> ${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}"
+                    local sid_lower=${sap_instances_array[$i],,}
+                    echo "command: su - ${sid_lower}adm -c sapcontrol -nr ${sap_instances_array[$i+3]} -function Stop"
+                    # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function Stop"
+                    if [ $? -ne 0 ]; then
+                        echo "=== Error stopping instance ${sap_instances_array[$i]}_${sap_instances_array[$i+1]}${sap_instances_array[$i+2]}_${sap_instances_array[$i+3]}"
+                    fi
+                    instance_found=1
+                fi
+            fi
+        done
+
         if [ "$instance_found" = "0" ]; then
             echo "Instance $1 not found"
         fi
@@ -490,7 +553,31 @@ function_instance_start(){
         local length=${#sap_instances_array[@]}
         local instance_found=0
 
-        # First pass: start instances with SCS or ASCS
+        # First pass: start instances with HDB
+        for (( i=0; i<(${length}); i+=5 )); do
+            if [[ "${sap_instances_array[$i+2]}" == "HDB" ]]; then
+                if [ "$1" = "all" ]; then
+                    instance_found=1
+                    echo -e "Starting ==> ${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}"
+                    local sid_lower=${sap_instances_array[$i],,}
+                    echo "command: su - ${sid_lower}adm -c sapcontrol -nr ${sap_instances_array[$i+3]} -function Start"
+                    # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function Start"
+                    if [ $? -ne 0 ]; then
+                        echo "=== Error starting instance ${sap_instances_array[$i]}_${sap_instances_array[$i+1]}${sap_instances_array[$i+2]}_${sap_instances_array[$i+3]}"
+                    fi
+                elif [ "$1" = "${sap_instances_array[$i]}" ]; then
+                    instance_found=1
+                    echo -e "Starting ==> ${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}"
+                    local sid_lower=${sap_instances_array[$i],,}
+                    echo "command: su - ${sid_lower}adm -c sapcontrol -nr ${sap_instances_array[$i+3]} -function Start"
+                    # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function Start"
+                    if [ $? -ne 0 ]; then
+                        echo "=== Error starting instance ${sap_instances_array[$i]}_${sap_instances_array[$i+1]}${sap_instances_array[$i+2]}_${sap_instances_array[$i+3]}"
+                    fi
+                fi
+            fi
+        done
+        # Second pass: start instances with SCS, ASCS
         for (( i=0; i<(${length}); i+=5 )); do
             if [[ "${sap_instances_array[$i+2]}" == "SCS" || "${sap_instances_array[$i+2]}" == "ASCS" ]]; then
                 if [ "$1" = "all" ]; then
@@ -515,9 +602,9 @@ function_instance_start(){
             fi
         done
 
-        # Second pass: start the rest of the instances
+        # Third pass: start the rest of the instances
         for (( i=0; i<(${length}); i+=5 )); do
-            if [[ "${sap_instances_array[$i+2]}" != "SCS" && "${sap_instances_array[$i+2]}" != "ASCS" ]]; then
+            if [[ "${sap_instances_array[$i+2]}" != "SCS" && "${sap_instances_array[$i+2]}" != "ASCS" && "${sap_instances_array[$i+2]}" != "HDB" ]]; then
                 if [ "$1" = "all" ]; then
                     instance_found=1
                     echo -e "Starting ==> ${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}"
@@ -558,24 +645,52 @@ function_instance_restart(){
         fi
     fi
 }
-function_find_saprouter(){
-    local saprouter_info
-    saprouter_info=$(ps -eo user,args | grep '[s]aprouter')
-    if [[ -z "$saprouter_info" ]]; then
-        echo "saprouter is not running."
-        return 1
+function_find_saprouters() {
+    # Clear previous information
+    if [ ! -f "$SAPROUTER_STOPPED_WITH_SCRIPT" ]; then
+        > "$SAPROUTER_INFO_FILE"
+        # Find all saprouter processes
+        ps -eo pid,user,args | grep '[s]aprouter' |grep -v "find_saprouter" | while read -r pid user args; do
+            # Extract the full path of the saprouter executable
+            full_path=$(pwdx $pid | awk '{print $2}')
+            
+            # Extract arguments excluding the executable
+            arguments=$(echo "$args" | sed -e "s|^$full_path||")
+            
+            # Write information to file
+            echo "$user|$full_path|$arguments" >> "$SAPROUTER_INFO_FILE"
+        done
     else
-        local saprouter_path
-        saprouter_path=$(pwdx `pgrep saprouter` |awk '{ print $2 }')
-        local saprouter_user
-        saprouter_user=$(echo "$saprouter_info" | awk '{print $1}')
-        local saprouter_args
-        saprouter_args=$(echo "$saprouter_info" | cut -d' ' -f2-)
-        echo "saprouter is running under user: $saprouter_user"
-        echo "saprouter arguments: $saprouter_args"
-        echo "saprouter path: $saprouter_path"
-        return 0
+        echo "Saprouter was stopped previously by this script. Not searching for saprouter processes."
+        echo "Found saprouter info file at: $SAPROUTER_INFO_FILE"
+        echo $SAPROUTER_INFO_FILE
     fi
+}
+function_stop_saprouters() {
+    # Read the stored information and stop the saprouter processes
+    while IFS='|' read -r user full_path arguments; do
+        if [ -x "$full_path" ]; then
+            # Stop the process as the original user using the stored arguments
+            echo "Stopping saprouter: $full_path $arguments as user: $user"
+            # su - "$user" -c "pkill -f '$full_path $arguments'"
+            echo "Stopped saprouter: $full_path $arguments as user: $user"
+        else
+            echo "Executable $full_path not found or not executable."
+        fi
+    done < "$SAPROUTER_INFO_FILE"
+}
+function_start_saprouters() {
+    # Read the stored information and start the saprouter processes
+    while IFS='|' read -r user full_path arguments; do
+        if [ -x "$full_path" ]; then
+            # Start the process as the original user using the stored arguments
+            echo "Starting saprouter: $full_path $arguments as user: $user"
+            # su - "$user" -c "$full_path $arguments" &
+            echo "Started saprouter: $full_path $arguments as user: $user"
+        else
+            echo "Executable $full_path not found or not executable."
+        fi
+    done < "$SAPROUTER_INFO_FILE"
 }
 function_all_stop(){
     function_instance_stop all
@@ -586,6 +701,7 @@ function_all_start(){
     function_instance_start all
 }
 
+
 ## Main script logic
 # Check if the number of arguments is correct
 if [ "$#" -lt 1 ] || [ "$1" = "help" ]; then
@@ -594,7 +710,8 @@ if [ "$#" -lt 1 ] || [ "$1" = "help" ]; then
 fi
 # Find SAP and DB instances
 function_find_sap_instances
-function_find_db_instances
+function_find_hdb_instances
+function_find_non_hdb_instances
 
 # Assign arguments to variables
 arg1=$1
@@ -689,7 +806,7 @@ case $arg1 in
         function_all_start
         ;;
     find_saprouter)
-        function_find_saprouter
+        function_find_saprouters
         ;;
     *)
         echo "Error: 'command' must be 'instance_list', 'instance_status', 'instance_version', 'instance_stop', 'instance_start', 'instance_restart', 'db_status', 'db_stop', 'db_start', 'db_restart', 'db_type', 'all_stop' or 'all_start'"
