@@ -4,9 +4,43 @@
 # For usage information, run:
 # sap_instances.sh help 
 # sap_instances.sh <command> [<option>]
-# Load SAP instances data from /usr/sap/sapservices and match with /usr/sap/<SID>/SYS/profile/<PROFILE> into array sap_instances_array
-# declare -a hostname_array
-# sap_instances_exist=0
+# Where <command> can be:
+#   instance_list [<SID>|all|<empty>]: 
+#       lists all SAP instances found on the host
+#   instance_status [detail|<SID>|<empty>] [<SID>]: 
+#       shows the status of SAP instances found on the host
+#   instance_version [<SID>|<empty>]:
+#       shows the version of SAP instances found on the host
+#   instance_stop: stops SAP instances found on the host
+#   instance_start: starts SAP instances found on the host
+#   instance_restart: restarts SAP instances found on the host
+#   db_list: lists all non-HANA database instances found on the host. HANA databases are managed as an instance.
+#   db_status: shows the status of database instances found on the host
+#   db_stop: stops non-HANA database instances found on the host
+#   db_start: starts non-HANA database instances found on the host
+#   db_restart: restarts non-HANA database instances found on the host
+#   db_type: shows the type of database instances found on the host
+#   all_stop: stops all instances -including HANA instances- and non-HANA databases found on the host
+#   all_start: starts all instances -including HANA instances- and non-HANA databases found on the host
+# And <option> is an optional parameter depending on the command used.
+
+# Example:
+# sap_instances.sh instance_list
+# sap_instances.sh instance_status detail
+# sap_instances.sh instance_status <SID>
+# sap_instances.sh instance_version <SID>
+# sap_instances.sh instance_stop <SID|all>
+# sap_instances.sh instance_start <SID|all>
+# sap_instances.sh instance_restart <SID|all>
+# sap_instances.sh db_list
+# sap_instances.sh db_status <DBNAME|all>
+# sap_instances.sh db_stop <DBNAME>
+# sap_instances.sh db_start <DBNAME>
+# sap_instances.sh db_restart <DBNAME>
+# sap_instances.sh db_type <DBNAME>
+# sap_instances.sh all_stop
+# sap_instances.sh all_start
+
 
 # DECLARE ARRAYS AND VARIABLES
 declare -a sap_instances_array
