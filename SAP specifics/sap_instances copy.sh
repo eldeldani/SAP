@@ -711,15 +711,18 @@ fi
 function_find_sap_instances
 function_find_hdb_instances
 function_find_non_hdb_instances
+# Pendingn functions
+# function_find_saprouters
+# function_find_cloud_connectors
 
 # Assign arguments to variables
-arg1=$1
+command=$1
 arg2=$2
 arg3=$3
 arg4=$4
 
 # Validate arg1 and command
-case $arg1 in
+case $command in
     instance_list)
         function_instance_list $arg2
         ;;
@@ -804,9 +807,9 @@ case $arg1 in
     all_start)
         function_all_start
         ;;
-    find_saprouter)
-        function_find_saprouters
-        ;;
+    # find_saprouter)
+    #     function_find_saprouters
+    #     ;;
     *)
         echo "Error: 'command' must be 'instance_list', 'instance_status', 'instance_version', 'instance_stop', 'instance_start', 'instance_restart', 'db_status', 'db_stop', 'db_start', 'db_restart', 'db_type', 'all_stop' or 'all_start'"
         function_display_help
