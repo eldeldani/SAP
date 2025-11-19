@@ -134,16 +134,13 @@ function_db_list(){
     fi
 }   
 function_db_type(){
-    if ! [ "$non_hdb_instances_found" -eq 1 ]; then
-        echo "No non-HANA database instances found."
+    if [ "$non_hdb_instances_found" -eq 0 ] && [ "$hdb_instances_found" -eq 0 ]; then
+        echo "No database instances found."
         return 1
     else
         local db_name="${1^^}"
         if [[ -z "$db_name" || ${#db_name} -ne 3 ]]; then
             echo "Error: Database name not supplied or not having exactly 3 characters"
-            return 1
-        elif ! [ "$non_hdb_instances_found" -eq 1 ]; then
-            echo "Error: No non-HANA database instances found."
             return 1
         else
             local dboutput=$(/usr/sap/hostctrl/exe/saphostctrl -function ListDatabaseSystems |grep -v SYSTEMDB|grep "Database name: ${db_name}")
@@ -160,22 +157,20 @@ function_db_type(){
     fi
 
 }
+# Does not work well with HANA databases
 function_db_status(){
-    if ! [ "$non_hdb_instances_found" -eq 1 ]; then
-        echo "No non-HANA database instances found."
+    if [ "$non_hdb_instances_found" -eq 0 ] && [ "$hdb_instances_found" -eq 0 ]; then
+        echo "No database instances found."
     return 1
     else
         local db_name="${1^^}"
         if [[ -z "$db_name" || "$db_name" = "ALL" ]]; then
             /usr/sap/hostctrl/exe/saphostctrl -function ListDatabaseSystems|grep "Database name"
-        elif ! [ "$non_hdb_instances_found" -eq 1 ]; then
-            echo "Error: No non-HANA database instances found."
-            return 1
         elif [[ ${#db_name} -ne 3 ]]; then
                 echo "Error: Database name not having exactly 3 characters"
                 exit 1
         else
-        local db_type
+            local db_type
             if ! db_type=$(function_db_type $db_name); then
                 echo "Error: Unable to determine database type for $db_name"
                 return 1
@@ -191,81 +186,85 @@ function_db_status(){
 function_db_stop(){
     local db_name="${1^^}"
     local db_type
-    if ! [ "$non_hdb_instances_found" -eq 1 ]; then
-        echo "No non-HANA database instances found."
+    if [ "$non_hdb_instances_found" -eq 0 ] && [ "$hdb_instances_found" -eq 0 ]; then
+        echo "No database instances found to stop."
         return 1
-    elif [[ "$db_name" = "ALL" ]]; then
-        for sid in "${db_instances_array[@]}"; do
-        local db_status
-        if ! db_status=$(function_db_status $sid); then
-            echo "No database associated with instance $sid. Skipping"
-        else
-            if ! function_db_stop $sid; then
-                echo "Error: Failed to stop database associated with instance $sid. Aborting."
-                return 1         
-            fi
-        fi 
-        done
-    else
-        if ! db_type=$(function_db_type "$db_name"); then
-            echo "Error: Unable to determine database type for $db_name"
-            return 1
-        else
-            echo "Stopping database $db_name of type $db_type..."
-            echo "Command: /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $db_name -dbtype $db_type"
-            # /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $db_name -dbtype $db_type
-            if [ $? -eq 0 ]; then
-                echo "=== Database $db_name stopped successfully."
+    elif [ "$non_hdb_instances_found" -eq 1 ]; then
+        if [[ "$db_name" = "ALL" ]]; then
+            for sid in "${db_instances_array[@]}"; do
+            local db_status
+            if ! db_status=$(function_db_status $sid); then
+                echo "No database associated with instance $sid. Skipping"
             else
-                echo "=== Failed to stop database $db_name. Trying with force option..."
-                # /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $db_name -dbtype $db_type -force
+                if ! function_db_stop $sid; then
+                    echo "Error: Failed to stop database associated with instance $sid. Aborting."
+                    return 1         
+                fi
+            fi 
+            done
+        else
+            if ! db_type=$(function_db_type "$db_name"); then
+                echo "Error: Unable to determine database type for $db_name"
+                return 1
+            else
+                echo "Stopping database $db_name of type $db_type..."
+                echo "Command: /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $db_name -dbtype $db_type"
+                # /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $db_name -dbtype $db_type
                 if [ $? -eq 0 ]; then
-                    echo "=== Database $db_name stopped successfully with force option."
+                    echo "=== Database $db_name stopped successfully."
                 else
-                    echo "=== Failed to stop database $db_name even with force option."
-                    return 1
+                    echo "=== Failed to stop database $db_name. Trying with force option..."
+                    # /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $db_name -dbtype $db_type -force
+                    if [ $? -eq 0 ]; then
+                        echo "=== Database $db_name stopped successfully with force option."
+                    else
+                        echo "=== Failed to stop database $db_name even with force option."
+                        return 1
+                    fi
                 fi
             fi
+            echo "=== Checking database $db_name status..."
+            /usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname "$db_name" -dbtype $db_type
         fi
-        echo "=== Checking database $db_name status..."
-        /usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname "$db_name" -dbtype $db_type
     fi
 }
 function_db_start(){
     local db_name="${1^^}"
     local db_type
-    if ! [ "$non_hdb_instances_found" -eq 1 ]; then
-        echo "No non-HANA database instances found."
+    if [ "$non_hdb_instances_found" -eq 0 ] && [ "$hdb_instances_found" -eq 0 ]; then
+        echo "No database instances found to stop."
         return 1
-    elif [[ "$db_name" = "ALL" ]]; then
-        for sid in "${db_instances_array[@]}"; do
-        local db_status
-        if ! db_status=$(function_db_status $sid); then
-            echo "No database associated with instance $sid. Skipping"
-        else
-            if ! function_db_start $sid; then
-                echo "Error: Failed to start database associated with instance $sid. Aborting."
-                return 1         
-            fi
-        fi 
-        done
-    else
-        if ! db_type=$(function_db_type "$db_name"); then
-            echo "Error: Unable to determine database type for $db_name"
-            return 1
-        else
-            echo "=== Starting database $db_name of type $db_type..."
-            echo "Command: /usr/sap/hostctrl/exe/saphostctrl -function StartDatabase -dbname $db_name -dbtype $db_type"
-            # /usr/sap/hostctrl/exe/saphostctrl -function StartDatabase -dbname $db_name -dbtype $db_type
-            if [ $? -eq 0 ]; then
-                echo "=== Database $db_name started successfully."
+    elif [ "$non_hdb_instances_found" -eq 1 ]; then
+        if [[ "$db_name" = "ALL" ]]; then
+            for sid in "${db_instances_array[@]}"; do
+            local db_status
+            if ! db_status=$(function_db_status $sid); then
+                echo "No database associated with instance $sid. Skipping"
             else
-                echo "=== Failed to start database $db_name."
+                if ! function_db_start $sid; then
+                    echo "Error: Failed to start database associated with instance $sid. Aborting."
+                    return 1         
+                fi
+            fi 
+            done
+        else
+            if ! db_type=$(function_db_type "$db_name"); then
+                echo "Error: Unable to determine database type for $db_name"
                 return 1
+            else
+                echo "=== Starting database $db_name of type $db_type..."
+                echo "Command: /usr/sap/hostctrl/exe/saphostctrl -function StartDatabase -dbname $db_name -dbtype $db_type"
+                # /usr/sap/hostctrl/exe/saphostctrl -function StartDatabase -dbname $db_name -dbtype $db_type
+                if [ $? -eq 0 ]; then
+                    echo "=== Database $db_name started successfully."
+                else
+                    echo "=== Failed to start database $db_name."
+                    return 1
+                fi
             fi
+            echo "=== Checking database $db_name status..."
+            /usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname $db_name -dbtype $db_type
         fi
-        echo "=== Checking database $db_name status..."
-        /usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname $db_name -dbtype $db_type
     fi
 }
 function_db_restart(){
