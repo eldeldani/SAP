@@ -44,6 +44,7 @@
 
 # DECLARE ARRAYS AND VARIABLES
 declare -a sap_instances_array
+declare -a sap_daa_instances_array
 declare -a non_hdb_instances_array
 declare -a hdb_instances_array
 declare sap_instances_found=0
@@ -59,25 +60,32 @@ function_find_sap_instances(){
         return 1
     else
         while IFS= read -r line; do
-        # Use a regular expression to extract the required part
-        if [[ $line != \#* && $line =~ /usr/sap/([a-zA-Z0-9]{3})/SYS/profile/([a-zA-Z0-9]{3,5})_(D|DVEBMGS|ASCS|SCS|J|SMDA|HDB)([0-9]{2})_([a-zA-Z0-9]{1,13}) ]]; then
-            SID=${BASH_REMATCH[1]}
-            PROFSTRT=${BASH_REMATCH[2]}
-            INSTANCE_TYPE=${BASH_REMATCH[3]}
-            SN=${BASH_REMATCH[4]}
-            VHOSTNAME=${BASH_REMATCH[5]}
-            # Add entries to the array
-            sap_instances_array+=("$SID")
-            sap_instances_array+=("$PROFSTRT")
-            sap_instances_array+=("$INSTANCE_TYPE")
-            sap_instances_array+=("$SN")
-            sap_instances_array+=("$VHOSTNAME")
-            # Create the hostname string
-            hostname="${SID} ${PROFSTRT}_${INSTANCE_TYPE}${SN}_${VHOSTNAME}"
-            # hostname_array+=("$hostname")
-        fi
-        sap_instances_found=1
+            # Use a regular expression to extract the required part
+            if [[ $line != \#* && $line =~ /usr/sap/([a-zA-Z0-9]{3})/SYS/profile/([a-zA-Z0-9]{3,5})_(D|DVEBMGS|ASCS|SCS|J|HDB)([0-9]{2})_([a-zA-Z0-9]{1,13}) ]]; then
+                SID=${BASH_REMATCH[1]}
+                PROFSTRT=${BASH_REMATCH[2]}
+                INSTANCE_TYPE=${BASH_REMATCH[3]}
+                SN=${BASH_REMATCH[4]}
+                VHOSTNAME=${BASH_REMATCH[5]}
+                sap_instances_array+=("$SID")
+                sap_instances_array+=("$PROFSTRT")
+                sap_instances_array+=("$INSTANCE_TYPE")
+                sap_instances_array+=("$SN")
+                sap_instances_array+=("$VHOSTNAME")
+            elif [[ $line != \#* && $line =~ /usr/sap/([a-zA-Z0-9]{3})/SYS/profile/([a-zA-Z0-9]{3,5})_(SMDA)([0-9]{2})_([a-zA-Z0-9]{1,13}) ]]; then
+                SID=${BASH_REMATCH[1]}
+                PROFSTRT=${BASH_REMATCH[2]}
+                INSTANCE_TYPE=${BASH_REMATCH[3]}
+                SN=${BASH_REMATCH[4]}
+                VHOSTNAME=${BASH_REMATCH[5]}
+                sap_daa_instances_array+=("$SID")
+                sap_daa_instances_array+=("$PROFSTRT")
+                sap_daa_instances_array+=("$INSTANCE_TYPE")
+                sap_daa_instances_array+=("$SN")
+                sap_daa_instances_array+=("$VHOSTNAME")
+            fi
         done < "/usr/sap/sapservices"
+        sap_instances_found=1
     fi
 }
 function_find_non_hdb_instances(){
@@ -225,7 +233,7 @@ function_db_stop(){
         return 1
     elif [ "$non_hdb_instances_found" -eq 1 ]; then
         if [[ "$db_name" = "ALL" ]]; then
-            for sid in "${db_instances_array[@]}"; do
+            for sid in "${non_hdb_instances_array[@]}"; do
             local db_status
             if ! db_status=$(function_db_status $sid); then
                 echo "No database associated with instance $sid. Skipping"
@@ -266,11 +274,11 @@ function_db_start(){
     local db_name="${1^^}"
     local db_type
     if [ "$non_hdb_instances_found" -eq 0 ] && [ "$hdb_instances_found" -eq 0 ]; then
-        echo "No database instances found to stop."
+        echo "No database instances found to start."
         return 1
     elif [ "$non_hdb_instances_found" -eq 1 ]; then
         if [[ "$db_name" = "ALL" ]]; then
-            for sid in "${db_instances_array[@]}"; do
+            for sid in "${non_hdb_instances_array[@]}"; do
             local db_status
             if ! db_status=$(function_db_status $sid); then
                 echo "No database associated with instance $sid. Skipping"
@@ -325,6 +333,20 @@ function_instance_list(){
             else
                 if [ "$1" = "${sap_instances_array[$i]}" ]; then
                     function_list_in
+                fi
+            fi
+        done
+        local length_daa=${#sap_daa_instances_array[@]}
+        for (( j=0; j<(${length_daa}); j+=5 ));
+        do 
+            function_list_daa(){
+                echo "${sap_daa_instances_array[$j]} --> ${sap_daa_instances_array[$j+1]}_${sap_daa_instances_array[$j+2]}${sap_daa_instances_array[$j+3]}_${sap_daa_instances_array[$j+4]}"
+            }
+            if [[ -z "$1" || "$1" = "all" || "$1" = "None" ]]; then
+                function_list_daa
+            else
+                if [ "$1" = "${sap_daa_instances_array[$j]}" ]; then
+                    function_list_daa
                 fi
             fi
         done
@@ -498,7 +520,7 @@ function_instance_stop(){
     else
         local length=${#sap_instances_array[@]}
         local instance_found=0
-        # First pass: Stop the instances not being SCS, ASCS, or HDB
+        # First pass: Stop the instances not being SCS, ASCS, HDB
         for (( i=0; i<(${length}); i+=5 )); do 
             if [[ "${sap_instances_array[$i+2]}" != "SCS" && "${sap_instances_array[$i+2]}" != "ASCS" && "${sap_instances_array[$i+2]}" != "HDB" ]]; then
                 if [ "$1" = "all" ]; then
