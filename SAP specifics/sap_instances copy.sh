@@ -205,14 +205,13 @@ function_db_type(){
 function_db_status(){
     if [ "$non_hdb_instances_found" -eq 0 ] && [ "$hdb_instances_found" -eq 0 ]; then
         echo "No database instances found."
-    return 1
     else
         local db_name="${1^^}"
-        if [[ -z "$db_name" || "$db_name" = "ALL" ]]; then
+        if [[ -z "$db_name" || "$db_name" = "ALL" || "$db_name" = "NONE" ]]; then
             /usr/sap/hostctrl/exe/saphostctrl -function ListDatabaseSystems|grep "Database name"
         elif [[ ${#db_name} -ne 3 ]]; then
                 echo "Error: Database name not having exactly 3 characters"
-                exit 1
+                return 1
         else
             local db_type
             if ! db_type=$(function_db_type $db_name); then
@@ -222,17 +221,18 @@ function_db_status(){
                 /usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname $db_name -dbtype $db_type |head -1|awk '{ print $3 }'
                 if [ ! $? -eq 0 ]; then
                     echo "=== Error executing command"
+                    return 1
                 fi
             fi
         fi
     fi
 }
 function_db_stop(){
+    local overall_exit_status=0
     local db_name="${1^^}"
     local db_type
     if [ "$non_hdb_instances_found" -eq 0 ] && [ "$hdb_instances_found" -eq 0 ]; then
         echo "No database instances found to stop."
-        return 1
     elif [ "$non_hdb_instances_found" -eq 1 ]; then
         if [[ "$db_name" = "ALL" ]]; then
             for sid in "${non_hdb_instances_array[@]}"; do
@@ -242,14 +242,14 @@ function_db_stop(){
             else
                 if ! function_db_stop $sid; then
                     echo "Error: Failed to stop database associated with instance $sid. Aborting."
-                    return 1         
+                    overall_exit_status=1         
                 fi
             fi 
             done
         else
             if ! db_type=$(function_db_type "$db_name"); then
                 echo "Error: Unable to determine database type for $db_name"
-                return 1
+                overall_exit_status=1
             else
                 echo "Stopping database $db_name of type $db_type..."
                 echo "Command: /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $db_name -dbtype $db_type"
@@ -263,7 +263,7 @@ function_db_stop(){
                         echo "=== Database $db_name stopped successfully with force option."
                     else
                         echo "=== Failed to stop database $db_name even with force option."
-                        return 1
+                        overall_exit_status=1
                     fi
                 fi
             fi
@@ -271,13 +271,14 @@ function_db_stop(){
             /usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname "$db_name" -dbtype $db_type
         fi
     fi
+    return $overall_exit_status
 }
 function_db_start(){
+    local overall_exit_status=0
     local db_name="${1^^}"
     local db_type
     if [ "$non_hdb_instances_found" -eq 0 ] && [ "$hdb_instances_found" -eq 0 ]; then
         echo "No database instances found to start."
-        return 1
     elif [ "$non_hdb_instances_found" -eq 1 ]; then
         if [[ "$db_name" = "ALL" ]]; then
             for sid in "${non_hdb_instances_array[@]}"; do
@@ -287,7 +288,7 @@ function_db_start(){
             else
                 if ! function_db_start $sid; then
                     echo "Error: Failed to start database associated with instance $sid. Aborting."
-                    return 1         
+                    overall_exit_status=1         
                 fi
             fi 
             done
@@ -303,20 +304,25 @@ function_db_start(){
                     echo "=== Database $db_name started successfully."
                 else
                     echo "=== Failed to start database $db_name."
-                    return 1
+                    overall_exit_status=1
                 fi
             fi
             echo "=== Checking database $db_name status..."
             /usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname $db_name -dbtype $db_type
         fi
     fi
+    exit $overall_exit_status
 }
 function_db_restart(){
-    local db_name="${1^^}"
-    if ! function_db_stop $db_name; then
-        return 1
-    elif ! function_db_start $db_name; then
-        return 1
+    if [ "$non_hdb_instances_found" -eq 0 ] && [ "$hdb_instances_found" -eq 0 ]; then
+        echo "No database instances found to start."
+    else
+        local db_name="${1^^}"
+        if ! function_db_stop $db_name; then
+            return 1
+        elif ! function_db_start $db_name; then
+            return 1
+        fi
     fi
 }
 # SAP INSTANCE FUNCTIONS
@@ -347,124 +353,125 @@ function_instance_status(){
         echo "No SAP instances found."
         return 1
     else
-        if [ "$1" = "detail" ]; then
-            local length=${#sap_instances_all_array[@]}
-            # echo "Array length: $length"
-            for (( i=0; i<(${length}); i+=5 ));
-            do 
-                if [[ -z "$2" || "$2" = "all" || "$1" = "None" ]]; then
-                    local sid_lower=${sap_instances_all_array[$i],,}
-                    # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_all_array[$i+3]} -function GetProcessList" >> /dev/null
-                    echo -e "${sap_instances_all_array[$i]} --> ${sap_instances_all_array[$i+1]}_${sap_instances_all_array[$i+2]}${sap_instances_all_array[$i+3]}_${sap_instances_all_array[$i+4]}"
-                    case ${sap_instances_all_array[$i+2]} in
-                    D)
-                        echo "Instance Type: ${sap_instances_all_array[$i+2]} - Dialog Instance"
-                        ;;
-                    DVEBMGS)
-                        echo "Instance Type: ${sap_instances_all_array[$i+2]} - Central Instance"
-                        ;;
-                    ASCS)
-                        echo "Instance Type: ${sap_instances_all_array[$i+2]} - ABAP Central Services Instance"
-                        ;;
-                    SCS)
-                        echo "Instance Type: ${sap_instances_all_array[$i+2]} - JAVA Central Services Instance"
-                        ;;
-                    J)
-                        echo "Instance Type: ${sap_instances_all_array[$i+2]} - JAVA Instance"
-                        ;;
-                    SMDA)
-                        echo "Instance Type: ${sap_instances_all_array[$i+2]} - Solution Manager Diagnostics Instance"
-                        ;;
-                    HDB)
-                        echo "Instance Type: ${sap_instances_all_array[$i+2]} - HANA Platform Instance"
-                        ;;
-                    esac
-                    # echo "Instance: ${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}"
-                    # echo "Hostname: ${sap_instances_all_array[$i+4]}"
-                    # echo "SAP Instance: ${sap_instances_all_array[$i]}_${sap_instances_all_array[$i+1]}${sap_instances_all_array[$i+2]}_${sap_instances_all_array[$i+3]}"
-                    su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_all_array[$i+3]} -function GetProcessList"
-                    if ! [ $? -eq 3 ]; then
-                        overall_exit_status=1
-                    fi
-                else
-                    if [ "$2" = "${sap_instances_all_array[$i]}" ]; then
-                        local sid_lower=${sap_instances_all_array[$i],,}
-                        su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_all_array[$i+3]} -function GetProcessList" >> /dev/null
-                        echo -e "${sap_instances_all_array[$i]} --> ${sap_instances_all_array[$i+1]}_${sap_instances_all_array[$i+2]}${sap_instances_all_array[$i+3]}_${sap_instances_all_array[$i+4]}"
-                        case ${sap_instances_all_array[$i+2]} in
-                        D)
-                            echo "Instance Type: ${sap_instances_all_array[$i+2]} - Dialog Instance"
-                            ;;
-                        DVEBMGS)
-                            echo "Instance Type: ${sap_instances_all_array[$i+2]} - Central Instance"
-                            ;;
-                        ASCS)
-                            echo "Instance Type: ${sap_instances_all_array[$i+2]} - ABAP Central Services Instance"
-                            ;;
-                        SCS)
-                            echo "Instance Type: ${sap_instances_all_array[$i+2]} - JAVA Central Services Instance"
-                            ;;
-                        J)
-                            echo "Instance Type: ${sap_instances_all_array[$i+2]} - JAVA Instance"
-                            ;;
-                        SMDA)
-                            echo "Instance Type: ${sap_instances_all_array[$i+2]} - Solution Manager Diagnostics Instance"
-                            ;;
-                        HDB)
-                            echo "Instance Type: ${sap_instances_all_array[$i+2]} - HANA Platform Instance"
-                            ;;
-                        esac
-                        # echo "Instance: ${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}"
-                        # echo "Hostname: ${sap_instances_all_array[$i+4]}"
-                        # echo "SAP Instance: ${sap_instances_all_array[$i]}_${sap_instances_all_array[$i+1]}${sap_instances_all_array[$i+2]}_${sap_instances_all_array[$i+3]}"
-                        su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_all_array[$i+3]} -function GetProcessList"
-                        if ! [ $? -eq 3 ]; then
-                            overall_exit_status=1
-                        fi
-                        echo ""=====================================================""          
-                    fi
+        local length=${#sap_instances_all_array[@]}
+        for (( i=0; i<(${length}); i+=5 ));
+        do 
+            if [[ -z "$1" || "$1" = "all" || "$1" = "None" ]]; then
+                local sid_lower=${sap_instances_all_array[$i],,}
+                su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_all_array[$i+3]} -function GetProcessList" >> /dev/null
+                result="$?"
+                # echo "Resultado ALL: "$result""
+                # Check the result and output accordingly
+                if [[ "$result" = "4"  ]]; then
+                    echo "STOPPED - ${sap_instances_all_array[$i]} --> ${sap_instances_all_array[$i+1]}_${sap_instances_all_array[$i+2]}${sap_instances_all_array[$i+3]}_${sap_instances_all_array[$i+4]}" 
+                    overall_exit_status=1
+                elif [[ "$result" = "2" || "$result" = "0"  ]]; then
+                    echo "PARTIALLY RUNNING - ${sap_instances_all_array[$i]} --> ${sap_instances_all_array[$i+1]}_${sap_instances_all_array[$i+2]}${sap_instances_all_array[$i+3]}_${sap_instances_all_array[$i+4]}" 
+                    overall_exit_status=1
+                elif  [[ "$result" = "3" ]]; then 
+                    echo "RUNNING - ${sap_instances_all_array[$i]} --> ${sap_instances_all_array[$i+1]}_${sap_instances_all_array[$i+2]}${sap_instances_all_array[$i+3]}_${sap_instances_all_array[$i+4]}"  
                 fi
-            done
-        else
-            local length=${#sap_instances_all_array[@]}
-            for (( i=0; i<(${length}); i+=5 ));
-            do 
-                if [[ -z "$1" || "$1" = "all" || "$1" = "None" ]]; then
-                    local sid_lower=${sap_instances_all_array[$i],,}
-                    su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_all_array[$i+3]} -function GetProcessList" >> /dev/null
-                    result="$?"
-                    # echo "Resultado ALL: "$result""
-                    # Check the result and output accordingly
-                    if [[ "$result" = "4"  ]]; then
-                        echo "STOPPED - ${sap_instances_all_array[$i]} --> ${sap_instances_all_array[$i+1]}_${sap_instances_all_array[$i+2]}${sap_instances_all_array[$i+3]}_${sap_instances_all_array[$i+4]}" 
-                        overall_exit_status=1
-                    elif [[ "$result" = "2" || "$result" = "0"  ]]; then
-                        echo "PARTIALLY RUNNING - ${sap_instances_all_array[$i]} --> ${sap_instances_all_array[$i+1]}_${sap_instances_all_array[$i+2]}${sap_instances_all_array[$i+3]}_${sap_instances_all_array[$i+4]}" 
-                        overall_exit_status=1
-                    elif  [[ "$result" = "3" ]]; then 
-                        echo "RUNNING - ${sap_instances_all_array[$i]} --> ${sap_instances_all_array[$i+1]}_${sap_instances_all_array[$i+2]}${sap_instances_all_array[$i+3]}_${sap_instances_all_array[$i+4]}"  
-                    fi
-                else
-                if [ "$1" = "${sap_instances_all_array[$i]}" ]; then
-                    local sid_lower=${sap_instances_all_array[$i],,}
-                    su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_all_array[$i+3]} -function GetProcessList" >> /dev/null
-                    local result="$?"
-                    # Check the result and output accordingly
-                    # echo "Resultado: "$result""
-                    if [[ "$result" = "4"  ]]; then
-                        echo "STOPPED - ${sap_instances_all_array[$i]} --> ${sap_instances_all_array[$i+1]}_${sap_instances_all_array[$i+2]}${sap_instances_all_array[$i+3]}_${sap_instances_all_array[$i+4]}" 
-                        overall_exit_status=1
-                    elif [[ "$result" = "2" || "$result" = "0"  ]]; then
-                        echo "PARTIALLY RUNNING - ${sap_instances_all_array[$i]} --> ${sap_instances_all_array[$i+1]}_${sap_instances_all_array[$i+2]}${sap_instances_all_array[$i+3]}_${sap_instances_all_array[$i+4]}" 
-                        overall_exit_status=1
-                    elif  [[ "$result" = "3" ]]; then 
-                        echo "RUNNING - ${sap_instances_all_array[$i]} --> ${sap_instances_all_array[$i+1]}_${sap_instances_all_array[$i+2]}${sap_instances_all_array[$i+3]}_${sap_instances_all_array[$i+4]}"  
-                    fi
+            else
+            if [ "$1" = "${sap_instances_all_array[$i]}" ]; then
+                local sid_lower=${sap_instances_all_array[$i],,}
+                su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_all_array[$i+3]} -function GetProcessList" >> /dev/null
+                local result="$?"
+                # Check the result and output accordingly
+                # echo "Resultado: "$result""
+                if [[ "$result" = "4"  ]]; then
+                    echo "STOPPED - ${sap_instances_all_array[$i]} --> ${sap_instances_all_array[$i+1]}_${sap_instances_all_array[$i+2]}${sap_instances_all_array[$i+3]}_${sap_instances_all_array[$i+4]}" 
+                    overall_exit_status=1
+                elif [[ "$result" = "2" || "$result" = "0"  ]]; then
+                    echo "PARTIALLY RUNNING - ${sap_instances_all_array[$i]} --> ${sap_instances_all_array[$i+1]}_${sap_instances_all_array[$i+2]}${sap_instances_all_array[$i+3]}_${sap_instances_all_array[$i+4]}" 
+                    overall_exit_status=1
+                elif  [[ "$result" = "3" ]]; then 
+                    echo "RUNNING - ${sap_instances_all_array[$i]} --> ${sap_instances_all_array[$i+1]}_${sap_instances_all_array[$i+2]}${sap_instances_all_array[$i+3]}_${sap_instances_all_array[$i+4]}"  
                 fi
-                fi
-            done
-        fi
+            fi
+            fi
+        done
     fi
+    return $overall_exit_status
+}
+function_instance_status_det(){
+    local overall_exit_status=0
+    local length=${#sap_instances_all_array[@]}
+    # echo "Array length: $length"
+    for (( i=0; i<(${length}); i+=5 ));
+    do 
+        if [[ -z "$1" || "$1" = "all" || "$1" = "None" ]]; then
+            local sid_lower=${sap_instances_all_array[$i],,}
+            # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_all_array[$i+3]} -function GetProcessList" >> /dev/null
+            echo -e "${sap_instances_all_array[$i]} --> ${sap_instances_all_array[$i+1]}_${sap_instances_all_array[$i+2]}${sap_instances_all_array[$i+3]}_${sap_instances_all_array[$i+4]}"
+            case ${sap_instances_all_array[$i+2]} in
+            D)
+                echo "Instance Type: ${sap_instances_all_array[$i+2]} - Dialog Instance"
+                ;;
+            DVEBMGS)
+                echo "Instance Type: ${sap_instances_all_array[$i+2]} - Central Instance"
+                ;;
+            ASCS)
+                echo "Instance Type: ${sap_instances_all_array[$i+2]} - ABAP Central Services Instance"
+                ;;
+            SCS)
+                echo "Instance Type: ${sap_instances_all_array[$i+2]} - JAVA Central Services Instance"
+                ;;
+            J)
+                echo "Instance Type: ${sap_instances_all_array[$i+2]} - JAVA Instance"
+                ;;
+            SMDA)
+                echo "Instance Type: ${sap_instances_all_array[$i+2]} - Solution Manager Diagnostics Instance"
+                ;;
+            HDB)
+                echo "Instance Type: ${sap_instances_all_array[$i+2]} - HANA Platform Instance"
+                ;;
+            esac
+            # echo "Instance: ${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}"
+            # echo "Hostname: ${sap_instances_all_array[$i+4]}"
+            # echo "SAP Instance: ${sap_instances_all_array[$i]}_${sap_instances_all_array[$i+1]}${sap_instances_all_array[$i+2]}_${sap_instances_all_array[$i+3]}"
+            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_all_array[$i+3]} -function GetProcessList"
+            if ! [ $? -eq 3 ]; then
+                overall_exit_status=1
+            fi
+        else
+            if [ "$1" = "${sap_instances_all_array[$i]}" ]; then
+                local sid_lower=${sap_instances_all_array[$i],,}
+                su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_all_array[$i+3]} -function GetProcessList" >> /dev/null
+                echo -e "${sap_instances_all_array[$i]} --> ${sap_instances_all_array[$i+1]}_${sap_instances_all_array[$i+2]}${sap_instances_all_array[$i+3]}_${sap_instances_all_array[$i+4]}"
+                case ${sap_instances_all_array[$i+2]} in
+                D)
+                    echo "Instance Type: ${sap_instances_all_array[$i+2]} - Dialog Instance"
+                    ;;
+                DVEBMGS)
+                    echo "Instance Type: ${sap_instances_all_array[$i+2]} - Central Instance"
+                    ;;
+                ASCS)
+                    echo "Instance Type: ${sap_instances_all_array[$i+2]} - ABAP Central Services Instance"
+                    ;;
+                SCS)
+                    echo "Instance Type: ${sap_instances_all_array[$i+2]} - JAVA Central Services Instance"
+                    ;;
+                J)
+                    echo "Instance Type: ${sap_instances_all_array[$i+2]} - JAVA Instance"
+                    ;;
+                SMDA)
+                    echo "Instance Type: ${sap_instances_all_array[$i+2]} - Solution Manager Diagnostics Instance"
+                    ;;
+                HDB)
+                    echo "Instance Type: ${sap_instances_all_array[$i+2]} - HANA Platform Instance"
+                    ;;
+                esac
+                # echo "Instance: ${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}"
+                # echo "Hostname: ${sap_instances_all_array[$i+4]}"
+                # echo "SAP Instance: ${sap_instances_all_array[$i]}_${sap_instances_all_array[$i+1]}${sap_instances_all_array[$i+2]}_${sap_instances_all_array[$i+3]}"
+                su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_all_array[$i+3]} -function GetProcessList"
+                if ! [ $? -eq 3 ]; then
+                    overall_exit_status=1
+                fi
+                echo ""=====================================================""          
+            fi
+        fi
+    done
     return $overall_exit_status
 }
 function_instance_version(){
@@ -497,9 +504,9 @@ function_instance_version(){
     fi
 }
 function_instance_stop(){
+    local overall_exit_status=0
     if ! [ "$sap_instances_found" -eq 1 ]; then
         echo "No SAP instances found."
-        return 1
     else
         local length=${#sap_instances_array[@]}
         local instance_found=0
@@ -513,6 +520,7 @@ function_instance_stop(){
                     # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function Stop"
                     if [ $? -ne 0 ]; then
                         echo "=== Error stopping instance ${sap_instances_array[$i]}_${sap_instances_array[$i+1]}${sap_instances_array[$i+2]}_${sap_instances_array[$i+3]}"
+                        overall_exit_status=1
                     fi
                     instance_found=1
                 elif [ "$1" = "${sap_instances_array[$i]}" ]; then
@@ -522,6 +530,7 @@ function_instance_stop(){
                     # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function Stop"
                     if [ $? -ne 0 ]; then
                         echo "=== Error stopping instance ${sap_instances_array[$i]}_${sap_instances_array[$i+1]}${sap_instances_array[$i+2]}_${sap_instances_array[$i+3]}"
+                        overall_exit_status=1
                     fi
                     instance_found=1
                 fi
@@ -538,6 +547,7 @@ function_instance_stop(){
                     # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function Stop"
                     if [ $? -ne 0 ]; then
                         echo "=== Error stopping instance ${sap_instances_array[$i]}_${sap_instances_array[$i+1]}${sap_instances_array[$i+2]}_${sap_instances_array[$i+3]}"
+                        overall_exit_status=1
                     fi
                     instance_found=1
                 elif [ "$1" = "${sap_instances_array[$i]}" ]; then
@@ -547,6 +557,7 @@ function_instance_stop(){
                     # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function Stop"
                     if [ $? -ne 0 ]; then
                         echo "=== Error stopping instance ${sap_instances_array[$i]}_${sap_instances_array[$i+1]}${sap_instances_array[$i+2]}_${sap_instances_array[$i+3]}"
+                        overall_exit_status=1
                     fi
                     instance_found=1
                 fi
@@ -563,6 +574,7 @@ function_instance_stop(){
                     # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function Stop"
                     if [ $? -ne 0 ]; then
                         echo "=== Error stopping instance ${sap_instances_array[$i]}_${sap_instances_array[$i+1]}${sap_instances_array[$i+2]}_${sap_instances_array[$i+3]}"
+                        overall_exit_status=1
                     fi
                     instance_found=1
                 elif [ "$1" = "${sap_instances_array[$i]}" ]; then
@@ -572,6 +584,7 @@ function_instance_stop(){
                     # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function Stop"
                     if [ $? -ne 0 ]; then
                         echo "=== Error stopping instance ${sap_instances_array[$i]}_${sap_instances_array[$i+1]}${sap_instances_array[$i+2]}_${sap_instances_array[$i+3]}"
+                        overall_exit_status=1
                     fi
                     instance_found=1
                 fi
@@ -582,11 +595,12 @@ function_instance_stop(){
             echo "Instance $1 not found"
         fi
     fi
+    return $overall_exit_status
 }
 function_instance_start(){
+    local overall
     if ! [ "$sap_instances_found" -eq 1 ]; then
         echo "No SAP instances found."
-        return 1
     else
         local length=${#sap_instances_array[@]}
         local instance_found=0
@@ -602,6 +616,7 @@ function_instance_start(){
                     # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function Start"
                     if [ $? -ne 0 ]; then
                         echo "=== Error starting instance ${sap_instances_array[$i]}_${sap_instances_array[$i+1]}${sap_instances_array[$i+2]}_${sap_instances_array[$i+3]}"
+                        overall_exit_status=1
                     fi
                 elif [ "$1" = "${sap_instances_array[$i]}" ]; then
                     instance_found=1
@@ -611,6 +626,7 @@ function_instance_start(){
                     # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function Start"
                     if [ $? -ne 0 ]; then
                         echo "=== Error starting instance ${sap_instances_array[$i]}_${sap_instances_array[$i+1]}${sap_instances_array[$i+2]}_${sap_instances_array[$i+3]}"
+                        overall_exit_status=1
                     fi
                 fi
             fi
@@ -626,6 +642,7 @@ function_instance_start(){
                     # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function Start"
                     if [ $? -ne 0 ]; then
                         echo "=== Error starting instance ${sap_instances_array[$i]}_${sap_instances_array[$i+1]}${sap_instances_array[$i+2]}_${sap_instances_array[$i+3]}"
+                        overall_exit_status=1
                     fi
                 elif [ "$1" = "${sap_instances_array[$i]}" ]; then
                     instance_found=1
@@ -635,6 +652,7 @@ function_instance_start(){
                     # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function Start"
                     if [ $? -ne 0 ]; then
                         echo "=== Error starting instance ${sap_instances_array[$i]}_${sap_instances_array[$i+1]}${sap_instances_array[$i+2]}_${sap_instances_array[$i+3]}"
+                        overall_exit_status=1
                     fi
                 fi
             fi
@@ -651,6 +669,7 @@ function_instance_start(){
                     # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function Start"
                     if [ $? -ne 0 ]; then
                         echo "=== Error starting instance ${sap_instances_array[$i]}_${sap_instances_array[$i+1]}${sap_instances_array[$i+2]}_${sap_instances_array[$i+3]}"
+                        overall_exit_status=1
                     fi
                 elif [ "$1" = "${sap_instances_array[$i]}" ]; then
                     instance_found=1
@@ -660,6 +679,7 @@ function_instance_start(){
                     # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function Start"
                     if [ $? -ne 0 ]; then
                         echo "=== Error starting instance ${sap_instances_array[$i]}_${sap_instances_array[$i+1]}${sap_instances_array[$i+2]}_${sap_instances_array[$i+3]}"
+                        overall_exit_status=1
                     fi
                 fi
             fi
@@ -669,6 +689,7 @@ function_instance_start(){
             echo "Instance $1 not found"
         fi
     fi
+    return $overall_exit_status
 }
 function_instance_restart(){
     if ! [ "$sap_instances_found" -eq 1 ]; then
@@ -676,10 +697,10 @@ function_instance_restart(){
     else
         if ! function_instance_stop $1; then
             echo "Error: Failed to stop instance $1. Aborting restart."
-            exit 1
+            return 1
         elif ! function_instance_start $1; then
             echo "Error: Failed to start instance $1 after stopping."
-            exit 1
+            return 1
         fi
     fi
 }
@@ -731,12 +752,22 @@ function_start_saprouters() {
     done < "$SAPROUTER_INFO_FILE"
 }
 function_all_stop(){
-    function_instance_stop all
-    function_db_stop all
+    if ! function_instance_stop all; then
+        echo "Error stopping instances."
+        return 1
+    elif ! function_db_stop all; then
+        echo "Error stopping databases."
+        return 1
+    fi
 }
 function_all_start(){
-    function_db_start all
-    function_instance_start all
+    if ! function_db_start all; then
+        echo "Error starting databases."
+        return 1
+    elif ! function_instance_start all; then
+        echo "Error starting instances."
+        return 1
+    fi
 }
 
 
@@ -766,7 +797,10 @@ case $command in
         function_instance_list $arg2
         ;;
     instance_status)
-        function_instance_status $arg2 $arg3
+        function_instance_status $arg2
+        ;;
+    instance_status_det)
+        function_instance_status_det $arg2
         ;;
     instance_version)
         function_instance_version $arg2
@@ -850,7 +884,7 @@ case $command in
     #     function_find_saprouters
     #     ;;
     *)
-        echo "Error: 'command' must be 'instance_list', 'instance_status', 'instance_version', 'instance_stop', 'instance_start', 'instance_restart', 'db_status', 'db_stop', 'db_start', 'db_restart', 'db_type', 'all_stop' or 'all_start'"
+        echo "Error: 'command' must be 'instance_list', 'instance_status', 'instance_status_det', 'instance_version', 'instance_stop', 'instance_start', 'instance_restart', 'db_status', 'db_stop', 'db_start', 'db_restart', 'db_type', 'all_stop' or 'all_start'"
         function_display_help
         exit 1
         ;;
