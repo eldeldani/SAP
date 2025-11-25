@@ -22,6 +22,7 @@
 #   db_type: shows the type of database instances found on the host
 #   all_stop: stops all instances -including HANA instances- and non-HANA databases found on the host
 #   all_start: starts all instances -including HANA instances- and non-HANA databases found on the host
+#   all_restart: stops/starts all instances -including HANA intances- and non-HANA databases on the host
 # And <option> is an optional parameter depending on the command used.
 
 # Example:
