@@ -1,20 +1,20 @@
 #!/bin/bash
-# SAP instance lookup tool for any host
+# This script allows you to manage SAP instances and associated databases on a host.
 # Created by Daniel Munoz
 # For usage information, run:
-# sap_instances.sh help 
+#   sap_instances.sh 
 # sap_instances.sh <command> [<option>]
-# Where <command> can be:
+# <command> can be:
 #   instance_list [<SID>|all|<empty>]: 
 #       lists all SAP instances found on the host
 #   instance_status [detail|<SID>|<empty>] [<SID>]: 
 #       shows the status of SAP instances found on the host
 #   instance_version [<SID>|<empty>]:
 #       shows the version of SAP instances found on the host
-#   instance_stop: stops SAP instances found on the host
-#   instance_start: starts SAP instances found on the host
-#   instance_restart: restarts SAP instances found on the host
-#   db_list: lists all non-HANA database instances found on the host. HANA databases are managed as an instance.
+#   system_stop: stops SAP systems found on the host without the database. In case of HANA databases, the database will be stopped as part of the instance stop.
+#   system_start: starts SAP systems found on the host without the database. In case of HANA databases, the database will be started as part of the instance start.
+#   system_restart: restarts SAP systems found on the host without the database. In case of HANA databases, the database will be restarted as part of the instance restart.
+#   db_list: lists all database systems found on the host.
 #   db_status: shows the status of database instances found on the host
 #   db_stop: stops non-HANA database instances found on the host
 #   db_start: starts non-HANA database instances found on the host
@@ -23,15 +23,15 @@
 #   all_stop: stops all instances -including HANA instances- and non-HANA databases found on the host
 #   all_start: starts all instances -including HANA instances- and non-HANA databases found on the host
 #   all_restart: stops/starts all instances -including HANA intances- and non-HANA databases on the host
-# And <option> is an optional parameter depending on the command used.
+# <option> is an optional parameter depending on the command used.
 
 # Example:
 # sap_instances.sh instance_list [<SID>|all|<empty>]
 # sap_instances.sh instance_status [detail|<SID>|<empty>] [<SID>]
 # sap_instances.sh instance_version [<SID>|<empty>]
-# sap_instances.sh instance_stop <SID|all>
-# sap_instances.sh instance_start <SID|all>
-# sap_instances.sh instance_restart <SID|all>
+# sap_instances.sh system_stop <SID|all>
+# sap_instances.sh system_start <SID|all>
+# sap_instances.sh system_restart <SID|all>
 # sap_instances.sh db_list 
 # sap_instances.sh db_status <DBNAME|all|<empty>}
 # sap_instances.sh db_stop <DBNAME>
@@ -40,6 +40,7 @@
 # sap_instances.sh db_type <DBNAME>
 # sap_instances.sh all_stop
 # sap_instances.sh all_start
+# sap_instances.sh all_restart
 
 
 # DECLARE ARRAYS AND VARIABLES
@@ -55,6 +56,8 @@ declare saprouter_instance_found=0
 # declare non_hdb_instances_found=0
 # declare hdb_instances_found=0
 declare db_systems_found=0
+declare sap_systems_found=0
+declare sap_instances_found=0
 declare saprouter_instance_found=0
 declare SAPROUTER_INFO_FILE="/tmp/saprouter_info.txt"
 declare SAPROUTER_STOPPED_WITH_SCRIPT="/tmp/saprouter_stopped_with_script.txt"
@@ -79,6 +82,7 @@ function_find_sap_instances(){
                 if [[ ! " ${sap_systems_array[@]} " =~ " ${SID} " ]]; then
                     sap_systems_array+=("$SID")
                 fi
+                sap_systems_found=1
             elif [[ $line != \#* && $line =~ /usr/sap/([a-zA-Z0-9]{3})/SYS/profile/([a-zA-Z0-9]{3,5})_(SMDA)([0-9]{2})_([a-zA-Z0-9-]{1,13}) ]]; then
                 SID=${BASH_REMATCH[1]}
                 PROFSTRT=${BASH_REMATCH[2]}
@@ -95,14 +99,11 @@ function_find_sap_instances(){
         done < "/usr/sap/sapservices"
         sap_instances_all_array=( "${sap_instances_array[@]}" "${sap_daa_instances_array[@]}" )
         sap_instances_found=1
-        sap_systems_found=1
     fi
-    echo "function_find_sap_instances: SAP Systems found: ${sap_systems_array[@]}"
-    echo "function_find_sap_instances: SAP Instances found: ${sap_instances_array[@]}"
 }
 function_find_db_systems(){
     if ! [ -x "/usr/sap/hostctrl/exe/saphostctrl" ]; then
-        # echo "Error: /usr/sap/hostctrl/exe/saphostctrl not found or not executable. Can not detect database instances."
+        echo "! Error: /usr/sap/hostctrl/exe/saphostctrl not found or not executable. Can not detect database instances."
         return 1
     else
         # capture full command output (stdout+stderr) without printing it
@@ -130,7 +131,6 @@ function_find_db_systems(){
             db_systems_found=1
         fi
     fi
-    echo "Database Instances found: ${#db_systems_array[@]}"
 }
 # DISPLAY HELP FUNCTION
 function_display_help(){
@@ -175,13 +175,13 @@ function_db_type(){
         return 1
     else
         local db_name="${1^^}"
-        if [[ -z "$db_name" || ${#db_name} -ne 3 ]]; then
-            echo "Error: Database name not supplied or not having exactly 3 characters"
+        if [[ -z "$db_name" || ${#db_name} -ne 3 && ! "$db_name" == *"@"* ]]; then
+            echo "! Error: Database name not supplied or not having exactly 3 characters"
             return 1
         else
-            local dboutput=$(/usr/sap/hostctrl/exe/saphostctrl -function ListDatabaseSystems |grep -v SYSTEMDB|grep "Database name: ${db_name}")
+            local dboutput=$(/usr/sap/hostctrl/exe/saphostctrl -function ListDatabaseSystems|grep "Database name: ${db_name}")
             if [[ -z "$dboutput" ]]; then
-                echo "Error: Unable to find database '$db_name' in saphostctrl output"
+                echo "! Error: Unable to find database '$db_name' in saphostctrl output"
                 # echo "Available databases are: ${db_instances_array[@]}"
                 return 1
             else
@@ -200,20 +200,28 @@ function_db_status(){
     else
         local db_name="${1^^}"
         if [[ -z "$db_name" || "$db_name" = "ALL" || "$db_name" = "NONE" ]]; then
-            /usr/sap/hostctrl/exe/saphostctrl -function ListDatabaseSystems|grep "Database name"
-        elif [[ ${#db_name} -ne 3 ]]; then
-                echo "Error: Database name not having exactly 3 characters"
+            for i in "${db_systems_array[@]}"; do
+                function_db_status $i
+            done
+        elif [[ ${#db_name} -ne 3 && ! "$db_name" == *"@"* ]]; then
+                echo "! Error: Database name not having exactly 3 characters"
                 return 1
         else
             local db_type
+            echo "=== Checking status for database: $db_name"
             if ! db_type=$(function_db_type $db_name); then
-                echo "Error: Unable to determine database type for $db_name"
+                echo "! Error: Unable to determine database type for $db_name"
                 return 1
             else
-                /usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname $db_name -dbtype $db_type |head -1|awk '{ print $3 }'
+                result=$(/usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname $db_name -dbtype $db_type |head -1|awk '{ print $3 }')
                 if [ ! $? -eq 0 ]; then
-                    echo "=== Error executing command"
+                    echo "! Error executing command"
                     return 1
+                elif [[ "$result" != "Running" ]]; then
+                        echo "! Error: Database '$db_name' is not running. Current status: $result"
+                        return 1
+                else
+                    echo "${result^^} - $db_name"
                 fi
             fi
         fi
@@ -225,7 +233,6 @@ function_db_stop(){
     local db_type
     if [ "$db_systems_found" -eq 0 ]; then
         echo "No database instances found to stop."
-        return 1
     else
         if [[ "$db_name" = "ALL" ]]; then      
             local db_status
@@ -234,7 +241,7 @@ function_db_stop(){
                     echo "No database associated with instance $sid or it is a HANA database which will be stopped as an instance. Skipping"
                 else
                     if ! db_type=$(function_db_type "$sid"); then
-                        echo "Error: Unable to determine database type for $sid"
+                        echo "! Error: Unable to determine database type for $sid"
                         overall_exit_status=1
                     else
                         echo "=== Stopping database associated with instance $sid..."
@@ -243,12 +250,12 @@ function_db_stop(){
                         if [ $? -eq 0 ]; then
                             echo "=== Database associated with instance $sid stopped successfully." 
                         else
-                            echo "=== Failed to stop database associated with instance $sid. Trying with force option..."
+                            echo "! Error: Failed to stop database associated with instance $sid. Trying with force option..."
                             # /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $sid -dbtype $db_type -force
                             if [ $? -eq 0 ]; then
                                 echo "=== Database associated with instance $sid stopped successfully with force option."
                             else
-                                echo "=== Failed to stop database associated with instance $sid even with force option."
+                                echo "! Error: Failed to stop database associated with instance $sid even with force option."
                                 overall_exit_status=1
                             fi
                         fi
@@ -257,10 +264,10 @@ function_db_stop(){
             done
         else
             if ! db_type=$(function_db_type "$db_name"); then
-                echo "Error: Unable to determine database type for $db_name"
+                echo "! Error: Unable to determine database type for $db_name"
                 overall_exit_status=1
             else
-                echo "Stopping database $db_name of type $db_type..."
+                echo "=== Stopping database $db_name of type $db_type..."
                 echo "Command: /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $db_name -dbtype $db_type"
                 # /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $db_name -dbtype $db_type
                 if [ $? -eq 0 ]; then
@@ -271,7 +278,7 @@ function_db_stop(){
                     if [ $? -eq 0 ]; then
                         echo "=== Database $db_name stopped successfully with force option."
                     else
-                        echo "=== Failed to stop database $db_name even with force option."
+                        echo "! Error: Failed to stop database $db_name even with force option."
                         overall_exit_status=1
                     fi
                 fi
@@ -285,8 +292,7 @@ function_db_start(){
     local db_name="${1^^}"
     local db_type
     if [ "$db_systems_found" -eq 0 ]; then
-        echo "No database instances found to stop."
-        return 1
+        echo "No database instances found to start."
     else
         if [[ "$db_name" = "ALL" ]]; then      
             local db_status
@@ -304,12 +310,12 @@ function_db_start(){
                         if [ $? -eq 0 ]; then
                             echo "=== Database associated with instance $sid started successfully." 
                         else
-                            echo "=== Failed to start database associated with instance $sid. Trying with force option..."
+                            echo "! Warning: Failed to start database associated with instance $sid. Trying with force option..."
                             # /usr/sap/hostctrl/exe/saphostctrl -function StartDatabase -dbname $sid -dbtype $db_type -force
                             if [ $? -eq 0 ]; then
                                 echo "=== Database associated with instance $sid started successfully with force option."
                             else
-                                echo "=== Failed to start database associated with instance $sid even with force option."
+                                echo "! Error: Failed to start database associated with instance $sid even with force option."
                                 overall_exit_status=1
                             fi
                         fi
@@ -318,7 +324,7 @@ function_db_start(){
             done
         else
             if ! db_type=$(function_db_type "$db_name"); then
-                echo "Error: Unable to determine database type for $db_name"
+                echo "! Error: Unable to determine database type for $db_name"
                 overall_exit_status=1
             else
                 echo "=== Starting database $db_name of type $db_type..."
@@ -327,12 +333,12 @@ function_db_start(){
                 if [ $? -eq 0 ]; then
                     echo "=== Database $db_name started successfully."
                 else
-                    echo "! Failed to start database $db_name. Trying with force option..."
+                    echo "! Warning: Failed to start database $db_name. Trying with force option..."
                     # /usr/sap/hostctrl/exe/saphostctrl -function StartDatabase -dbname $db_name -dbtype $db_type -force
                     if [ $? -eq 0 ]; then
                         echo "=== Database $db_name started successfully with force option."
                     else
-                        echo "! Failed to start database $db_name even with force option."
+                        echo "! Error: Failed to start database $db_name even with force option."
                         overall_exit_status=1
                     fi
                 fi
@@ -505,7 +511,6 @@ function_instance_status_det(){
 function_instance_version(){
     if ! [ "$sap_instances_found" -eq 1 ]; then
         echo "No SAP instances found."
-        return 1
     else
         local length=${#sap_instances_all_array[@]}
         local instance_found=0
@@ -578,39 +583,36 @@ function_start_saprouters() {
         fi
     done < "$SAPROUTER_INFO_FILE"
 }
-# Checks SAP Systems status by checking all its instances
+# Checks status of SAP Systems as a whole without checking individual instances or databases
 function_system_status(){
     local overall_exit_status=0
     if ! [ "$sap_systems_found" -eq 1 ]; then
         echo "No SAP Systems found."
-        return 1
     else
         local sap_systems_length=${#sap_systems_array[@]}
         for (( i=0; i<(${sap_systems_length}); i+=1 )); do
             local sid_lower=${sap_systems_array[$i],,}
             local sap_instances_length=${#sap_instances_array[@]}    
             if [[ -z "$1" || "$1" = "all" || "$1" = "None" ]]; then
+                echo "=== Checking status for SAP system: ${sap_systems_array[$i]}"
                 for (( j=0; j<(${sap_instances_length}); j+=5 )); do
                     if [ "${sap_instances_array[$j]}" = "${sap_systems_array[$i]}" ]; then
-                        echo -e "=== Checking status for instance ==> ${sap_instances_array[$j]} --> ${sap_instances_array[$j+1]}_${sap_instances_array[$j+2]}${sap_instances_array[$j+3]}_${sap_instances_array[$j+4]}"
-                        echo "Command: su - ${sid_lower}adm -c sapcontrol -nr ${sap_instances_array[$j+3]} -function GetProcessList"
-                        su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$j+3]} -function GetProcessList"
-                        if ! [ $? -eq 3 ]; then
+                        if ! function_instance_status "${sap_instances_array[$j]}"; then
                             overall_exit_status=1
                         fi
                     fi
                 done    
             elif [ "$1" = "${sap_systems_array[$i]}" ]; then
+                echo "=== Checking status for SAP system: ${sap_systems_array[$i]}"
                 for (( j=0; j<(${sap_instances_length}); j+=5 )); do 
                     if [ "${sap_instances_array[$j]}" = "${sap_systems_array[$i]}" ]; then
-                        echo -e "=== Checking status for instance ==> ${sap_instances_array[$j]} --> ${sap_instances_array[$j+1]}_${sap_instances_array[$j+2]}${sap_instances_array[$j+3]}_${sap_instances_array[$j+4]}"
-                        echo "Command: su - ${sid_lower}adm -c sapcontrol -nr ${sap_instances_array[$j+3]} -function GetProcessList"
-                        su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$j+3]} -function GetProcessList"
-                        if ! [ $? -eq 3 ]; then
+                        if ! function_instance_status "${sap_instances_array[$j]}"; then
                             overall_exit_status=1
                         fi
                     fi
                 done
+            else
+                echo "No SAP Systems found."
             fi
         done
     fi
@@ -673,6 +675,8 @@ function_system_stop(){
                         fi
                     fi
                 done
+            else    
+                echo "No SAP Systems found."
             fi
         done
     fi
@@ -712,6 +716,8 @@ function_system_start(){
                     echo "! Error starting SAP system: ${sap_systems_array[$i]}"
                     return 1
                 fi
+            else    
+                echo "No SAP Systems found."
             fi
         done
     fi
@@ -726,7 +732,7 @@ function_system_restart(){
             echo "! Error: Failed to stop system $1. Aborting restart."
             return 1
         elif ! function_system_start $1; then
-            echo "!Error: Failed to start system $1 after stopping."
+            echo "! Error: Failed to start system $1 after stopping."
             return 1
         fi
     fi
@@ -734,16 +740,16 @@ function_system_restart(){
 # Stops SAP Systems and associated non-hdb databases
 function_all_stop(){
     if ! function_system_stop all; then
-        echo "Error stopping SAP systems."
+        echo "! Error stopping SAP systems."
         return 1
     elif ! function_db_stop all; then
-        echo "Error stopping databases."
+        echo "! Error stopping databases."
         return 1
     fi
 }
 function_all_start(){
     if ! function_db_start all; then
-        echo "Error starting databases."
+        echo "! Error starting databases."
         return 1
     elif ! function_system_start all; then
         echo "Error starting SAP systems."
@@ -752,12 +758,22 @@ function_all_start(){
 }
 function_all_restart(){
     if ! function_all_stop; then
-        echo "Error restarting all SAP systems and databases."
+        echo "! Error restarting all SAP systems and databases."
         return 1
     elif ! function_all_start; then
-        echo "Error restarting all SAP systems and databases."
+        echo "! Error restarting all SAP systems and databases."
         return 1
     fi
+}
+function_all_status(){
+    local overall_exit_status=0
+    if ! function_system_status $1; then
+        overall_exit_status=1
+    fi
+    if ! function_db_status $1; then
+        overall_exit_status=1
+    fi
+    return $overall_exit_status
 }
 
 
@@ -796,7 +812,7 @@ case $command in
         ;;
     system_stop)
         if [[ -z "$arg2" ]]; then
-            echo "Error: 'option' is required for 'system_stop' command."
+            echo "! Error: 'option' is required for 'system_stop' command."
             function_display_help
             exit 1
         fi
@@ -804,7 +820,7 @@ case $command in
         ;;
     system_start)
         if [[ -z "$arg2" ]]; then
-            echo "Error: 'option' is required for 'system_start' command."
+            echo "! Error: 'option' is required for 'system_start' command."
             function_display_help
             exit 1
         fi
@@ -812,7 +828,7 @@ case $command in
         ;;
     system_restart)
         if [[ -z "$arg2" ]]; then   
-            echo "Error: 'option' is required for 'system_restart' command."
+            echo "! Error: 'option' is required for 'system_restart' command."
             function_display_help
             exit 1
         fi
@@ -829,7 +845,7 @@ case $command in
         ;;
     db_stop)
         if [[ -z "$arg2" ]]; then
-            echo "Error: 'option' is required for 'db_stop' command."
+            echo "! Error: 'option' is required for 'db_stop' command."
             function_display_help
             exit 1
         fi
@@ -837,7 +853,7 @@ case $command in
         ;;
     db_start)
         if [[ -z "$arg2" ]]; then
-            echo "Error: 'option' is required for 'db_start' command."
+            echo "! Error: 'option' is required for 'db_start' command."
             function_display_help
             exit 1
         fi
@@ -845,7 +861,7 @@ case $command in
         ;;
     db_restart)
         if [[ -z "$arg2" ]]; then
-            echo "Error: 'option' is required for 'db_restart' command."
+            echo "! Error: 'option' is required for 'db_restart' command."
             function_display_help
             exit 1
         fi
@@ -863,11 +879,14 @@ case $command in
     all_restart)
         function_all_restart
         ;;
+    all_status)
+        function_all_status $arg2
+        ;;
     # find_saprouter)
     #     function_find_saprouters
     #     ;;
     *)
-        echo "Error: 'command' must be 'instance_list', 'instance_status', 'instance_status_det', 'instance_version', 'system_stop', 'system_start', 'system_restart', 'db_status', 'db_stop', 'db_start', 'db_restart', 'db_type', 'all_stop', 'all_start' or 'all_restart'"
+        echo "! Error: 'command' must be 'instance_list', 'instance_status', 'instance_status_det', 'instance_version', 'system_status', 'system_stop', 'system_start', 'system_restart', 'db_status', 'db_stop', 'db_start', 'db_restart', 'db_type', 'all_stop', 'all_start' or 'all_restart'"
         function_display_help
         exit 1
         ;;
