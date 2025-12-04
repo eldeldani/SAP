@@ -1,0 +1,20 @@
+- name: Copy and execute sap_instances.sh
+  hosts: "{{ target_hosts }}"
+  become: true
+  vars:
+    script_source: /data/ansible-data/customer-data/scripts/sap_instances.sh
+    script_destination: /tmp/sap_instances.sh
+    script_permissions: '0744'
+  tasks:
+    - name: Copy the script to the target machine
+      copy:
+        src: "{{ script_source }}"
+        dest: "{{ script_destination }}"
+        mode: "{{ script_permissions }}"
+    - name: Execute the script with an optional argument
+      shell: >
+         timeout 30 bash {{ script_destination }} {{ command | default('') }} {{ SID | default('all') }}
+      register: script_output
+    - name: Print the output of the script execution
+      debug:
+        var: script_output.stdout_lines
