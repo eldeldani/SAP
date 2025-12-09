@@ -112,6 +112,7 @@ function_find_sap_instances(){
     echo "SAP systems found: ${sap_systems_array[@]}"
     echo "SAP Java systems found: ${sap_java_systems_array[@]}"
     echo "SAP instances found: ${sap_instances_array[@]}"
+    echo "SAP DAA instances found: ${sap_daa_instances_array[@]}"
 }
 function_find_db_systems(){
     if ! [ -x "/usr/sap/hostctrl/exe/saphostctrl" ]; then
@@ -206,7 +207,7 @@ function_db_type(){
 
 }
 # Does not work well with HANA databases
-function_db_status(){
+function_db_status(){   
     if [ "$db_systems_found" -eq 0 ]; then
         echo "No database instances found."
     else
@@ -225,15 +226,16 @@ function_db_status(){
                 echo "! Error: Unable to determine database type for $db_name"
                 return 1
             else
-                result=$(/usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname $db_name -dbtype $db_type |head -1|awk '{ print $3 }')
+                result_all=$(/usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname $db_name -dbtype $db_type )
+                result_short=$(echo "$result_all" |head -1|awk '{ print $3 }')
                 if [ ! $? -eq 0 ]; then
                     echo "! Error executing command"
                     return 1
-                elif [[ "$result" != "Running" ]]; then
-                        echo "! Error: Database '$db_name' is not running. Current status: $result"
+                elif [[ "$result_short" != "Running" ]]; then
+                        echo "! Error: Database '$db_name' is not running. Current status: $result_short"
                         return 1
                 else
-                    echo "${result^^} - $db_name"
+                    echo "$result_all - $db_name"
                 fi
             fi
         fi
@@ -398,6 +400,9 @@ function_instance_status(){
     if ! [ "$sap_instances_found" -eq 1 ]; then
         echo "No SAP instances found."
         return $overall_exit_status
+    elif [[ -z "$1" || ${#1} -ne 3 ]]; then
+        echo "! Error: Instance SID not supplied or not having exactly 3 characters"
+        return 1
     else
         local length=${#sap_instances_all_array[@]}
         for (( i=0; i<(${length}); i+=5 ));
@@ -548,6 +553,62 @@ function_instance_version(){
         fi
     fi
 }
+function_instance_start(){
+    local overall_exit_status=0
+    if ! [ "$sap_instances_found" -eq 1 ]; then
+        echo "No SAP instances found."
+        return $overall_exit_status
+    elif [[ -z "$1" || ${#1} -ne 3 ]]; then
+        echo "! Error: Instance SID not supplied or not having exactly 3 characters"
+        return 1
+    else
+        local length=${#sap_instances_array[@]}
+        for (( i=0; i<(${length}); i+=5 ));
+        do 
+            if [[ "$1" = "${sap_instances_array[$i]}" || "$1" = "all" || "$1" = "None" ]]; then
+                local sid_lower=${sap_instances_array[$i],,}
+                echo "=== Starting instance ${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}..."
+                echo "Command: su - ${sid_lower}adm -c sapcontrol -nr ${sap_instances_array[$i+3]} -function StartSystem waitforstarted 180"
+                # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function StartSystem waitforstarted 180"
+                if [ $? -eq 0 ]; then
+                    echo "=== Instance ${sap_instances_array[$i]} started successfully."
+                else
+                    echo "! Error: Failed to start instance ${sap_instances_array[$i]}."
+                    overall_exit_status=1
+                fi
+            fi
+        done
+    fi
+    return $overall_exit_status
+}
+function_instance_stop(){
+   local overall_exit_status=0
+    if ! [ "$sap_instances_found" -eq 1 ]; then
+        echo "No SAP instances found."
+        return $overall_exit_status
+    elif [[ -z "$1" || ${#1} -ne 3 ]]; then
+        echo "! Error: Instance SID not supplied or not having exactly 3 characters"
+        return 1
+    else
+        local length=${#sap_instances_array[@]}
+        for (( i=0; i<(${length}); i+=5 ));
+        do 
+            if [[ "$1" = "${sap_instances_array[$i]}" || "$1" = "all" || "$1" = "None" ]]; then
+                local sid_lower=${sap_instances_array[$i],,}
+                echo "=== Stopping instance ${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}..."
+                echo "Command: su - ${sid_lower}adm -c sapcontrol -nr ${sap_instances_array[$i+3]} -function StopSystem waitforstopped 180"
+                # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_instances_array[$i+3]} -function StopSystem waitforstopped 180"
+                if [ $? -eq 0 ]; then
+                    echo "=== Instance ${sap_instances_array[$i]} stopped successfully."
+                else
+                    echo "! Error: Failed to stop instance ${sap_instances_array[$i]}."
+                    overall_exit_status=1
+                fi
+            fi
+        done
+    fi
+    return $overall_exit_status
+}
 function_find_saprouters() {
     # Clear previous information
     if [ ! -f "$SAPROUTER_STOPPED_WITH_SCRIPT" ]; then
@@ -598,86 +659,91 @@ function_start_saprouters() {
 # Checks status of SAP Systems as a whole without checking individual instances or databases
 # <here issue
 function_system_status(){
-    local overall_exit_status=0
-    if ! [ "$sap_systems_found" -eq 1 ]; then
-        echo "No SAP Systems found."
-    else
-        local sap_systems_length=${#sap_systems_array[@]}
-        for (( i=0; i<(${sap_systems_length}); i+=1 )); do
-            local sid_lower=${sap_systems_array[$i],,}
-            local sap_instances_length=${#sap_instances_array[@]}    
-            if [[ -z "$1" || "$1" = "all" || "$1" = "None" ]]; then
-                echo "=== Checking status for SAP system: ${sap_systems_array[$i]}"
-                for (( j=0; j<(${sap_instances_length}); j+=5 )); do
-                    if [ "${sap_instances_array[$j]}" = "${sap_systems_array[$i]}" ]; then
-                        if ! function_instance_status "${sap_instances_array[$j]}"; then
-                            overall_exit_status=1
-                        fi
-                    fi
-                done    
-            elif [ "$1" = "${sap_systems_array[$i]}" ]; then
-                echo "=== Checking status for SAP system: ${sap_systems_array[$i]}"
-                for (( j=0; j<(${sap_instances_length}); j+=5 )); do 
-                    if [ "${sap_instances_array[$j]}" = "${sap_systems_array[$i]}" ]; then
-                        if ! function_instance_status "${sap_instances_array[$j]}"; then
-                            overall_exit_status=1
-                        fi
-                    fi
-                done
-            else
-                echo "No SAP Systems found."
+    if [[ -z "$1" || "$1" = "all" || "$1" = "None" ]]; then    
+        for sid in "${sap_systems_array[@]}"; do
+            echo "=== Checking status for SAP system: $sid"
+            if ! function_instance_status "$sid"; then
+                return 1
             fi
         done
+    else
+        echo "=== Checking status for SAP system: $sid"
+        if ! function_instance_status "$1"; then
+        return 1
+        fi
     fi
-    return $overall_exit_status
 }
 # Stops SAP Systems as a whole without stopping individual instances or databases
 function_system_stop(){
     if ! [ "$sap_systems_found" -eq 1 ]; then
         echo "No SAP Systems found."
-    else
-        local sap_systems_length=${#sap_systems_array[@]}
-        local sap_instances_length=${#sap_instances_array[@]}
-        for (( i=0; i<(${sap_systems_length}); i+=1 )); do 
-            local sid_lower=${sap_systems_array[$i],,}
-            if [[ -z "$1" || "$1" = "all" || "$1" = "None" ]]; then
-                for j in "${sap_java_instances_array[@]}"; do
-                    if [[ "${sap_systems_array[$i]}" == "$j" ]]; then
-                        # echo "Found instance $j for system ${sap_systems_array[$i]}"
-                        sys_num=${sap_instances_array[$j+3]}
-                        # echo "System number: $sys_num"
-                        break
-                    fi
-                done
-                echo -e "=== Stopping system ==> ${sap_systems_array[$i]}"
-                local sys_num=""
-                for j in "${sap_instances_array[@]}"; do
-                    if [[ "${sap_systems_array[$i]}" == "$j" ]]; then
-                        # echo "Found instance $j for system ${sap_systems_array[$i]}"
-                        sys_num=${sap_instances_array[$j+3]}
-                        # echo "System number: $sys_num"
-                        break
-                    fi
-                done
-                echo "Command: su - ${sid_lower}adm -c sapcontrol -nr ${sys_num} -function StopSystem WaitforStopped 600"
-                # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_systems_array[$i+3]} -function StopSystem"
-                if [ $? -ne 0 ]; then
-                    echo "! Error stopping SAP system: ${sap_systems_array[$i]}"
-                    return 1
-                fi
-            elif [[ "$1" = "${sap_systems_array[$i]}" ]]; then
-                echo -e "=== Stopping system ==> ${sap_systems_array[$i]} --> ${sap_systems_array[$i+1]}"
-                echo "Command: su - ${sid_lower}adm -c sapcontrol -nr ${sap_systems_array[$i+3]} -function StopSystem WaitforStopped 600"
-                # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_systems_array[$i+3]} -function StopSystem"
-                if [ $? -ne 0 ]; then
-                    echo "! Error stopping SAP system: ${sap_systems_array[$i]}"
-                    return 1
-                fi
-            else    
-                echo "No SAP Systems found."
+    elif [[ -z "$1" || "$1" = "all" || "$1" = "None" ]]; then
+        echo "Stopping all SAP systems found..."
+        for sid in "${sap_java_systems_array[@]}"; do
+            echo -e "=== Stopping SAP system ==> $sid"
+            if ! function_instance_stop "$sid"; then
+                return 1
             fi
         done
+        for sid in "${sap_systems_array[@]}"; do
+            echo -e "=== Stopping SAP system ==> $sid"
+            if ! function_instance_stop "$sid"; then
+                return 1
+            fi
+        done
+    else
+        echo -e "=== Stopping system ==> $1"
+        if ! function_instance_stop "$1"; then
+            return 1
+        fi
     fi
+
+
+    # if ! [ "$sap_systems_found" -eq 1 ]; then
+    #     echo "No SAP Systems found."
+    # else
+    #     local sap_systems_length=${#sap_systems_array[@]}
+    #     local sap_instances_length=${#sap_instances_array[@]}
+    #     for (( i=0; i<(${sap_systems_length}); i+=1 )); do 
+    #         local sid_lower=${sap_systems_array[$i],,}
+    #         if [[ -z "$1" || "$1" = "all" || "$1" = "None" ]]; then
+    #             for j in "${sap_java_instances_array[@]}"; do
+    #                 if [[ "${sap_systems_array[$i]}" == "$j" ]]; then
+    #                     # echo "Found instance $j for system ${sap_systems_array[$i]}"
+    #                     sys_num=${sap_instances_array[$j+3]}
+    #                     # echo "System number: $sys_num"
+    #                     break
+    #                 fi
+    #             done
+    #             echo -e "=== Stopping system ==> ${sap_systems_array[$i]}"
+    #             local sys_num=""
+    #             for j in "${sap_instances_array[@]}"; do
+    #                 if [[ "${sap_systems_array[$i]}" == "$j" ]]; then
+    #                     # echo "Found instance $j for system ${sap_systems_array[$i]}"
+    #                     sys_num=${sap_instances_array[$j+3]}
+    #                     # echo "System number: $sys_num"
+    #                     break
+    #                 fi
+    #             done
+    #             echo "Command: su - ${sid_lower}adm -c sapcontrol -nr ${sys_num} -function StopSystem WaitforStopped 600"
+    #             # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_systems_array[$i+3]} -function StopSystem"
+    #             if [ $? -ne 0 ]; then
+    #                 echo "! Error stopping SAP system: ${sap_systems_array[$i]}"
+    #                 return 1
+    #             fi
+    #         elif [[ "$1" = "${sap_systems_array[$i]}" ]]; then
+    #             echo -e "=== Stopping system ==> ${sap_systems_array[$i]} --> ${sap_systems_array[$i+1]}"
+    #             echo "Command: su - ${sid_lower}adm -c sapcontrol -nr ${sap_systems_array[$i+3]} -function StopSystem WaitforStopped 600"
+    #             # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_systems_array[$i+3]} -function StopSystem"
+    #             if [ $? -ne 0 ]; then
+    #                 echo "! Error stopping SAP system: ${sap_systems_array[$i]}"
+    #                 return 1
+    #             fi
+    #         else    
+    #             echo "No SAP Systems found."
+    #         fi
+    #     done
+    # fi
 
 }
 # Starts SAP Systems as a whole without starting individual instances or databases
