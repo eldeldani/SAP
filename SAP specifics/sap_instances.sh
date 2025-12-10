@@ -56,6 +56,7 @@ declare -a sap_systems_array
 declare -a sap_abap_systems_array
 declare -a sap_java_systems_array
 declare -a sap_hdb_systems_array
+declare -a sap_contentserver_systems_array
 declare sap_instances_found=0
 declare saprouter_instance_found=0
 # declare non_hdb_instances_found=0
@@ -74,7 +75,7 @@ function_find_sap_instances(){
     else
         while IFS= read -r line; do
             # Use a regular expression to extract the required part
-            if [[ $line != \#* && $line =~ /usr/sap/([a-zA-Z0-9]{3})/SYS/profile/([a-zA-Z0-9]{3,5})_(D|DVEBMGS|ASCS|SCS|J|HDB)([0-9]{2})_([a-zA-Z0-9-]{1,13}) ]]; then
+            if [[ $line != \#* && $line =~ /usr/sap/([a-zA-Z0-9]{3})/SYS/profile/([a-zA-Z0-9]{3,5})_(D|DVEBMGS|ASCS|SCS|J|C|HDB)([0-9]{2})_([a-zA-Z0-9-]{1,13}) ]]; then
                 SID=${BASH_REMATCH[1]}
                 PROFSTRT=${BASH_REMATCH[2]}
                 INSTANCE_TYPE=${BASH_REMATCH[3]}
@@ -106,6 +107,12 @@ function_find_sap_instances(){
                         sap_hdb_systems_array+=("$SID")
                     fi
                 fi
+                if [[ "$INSTANCE_TYPE" == "C" ]]; then
+                    sap_contentserver_instances_found=1
+                    if ! [[ " ${sap_contentserver_systems_array[@]} " =~ " ${SID} " ]]; then
+                        sap_contentserver_systems_array+=("$SID")
+                    fi
+                fi
                 sap_systems_found=1
             elif [[ $line != \#* && $line =~ /usr/sap/([a-zA-Z0-9]{3})/SYS/profile/([a-zA-Z0-9]{3,5})_(SMDA)([0-9]{2})_([a-zA-Z0-9-]{1,13}) ]]; then
                 SID=${BASH_REMATCH[1]}
@@ -127,6 +134,7 @@ function_find_sap_instances(){
     echo "SAP ABAP systems found: ${sap_abap_systems_array[@]}"
     echo "SAP JAVA systems found: ${sap_java_systems_array[@]}"
     echo "SAP HDB systems found: ${sap_hdb_systems_array[@]}"
+    echo "SAP Content Server systems found: ${sap_contentserver_systems_array[@]}"
     echo "SAP instances found: ${sap_instances_array[@]}"
     echo "SAP DAA instances found: ${sap_daa_instances_array[@]}"
 }
@@ -479,6 +487,9 @@ function_instance_status_det(){
             J)
                 echo "Instance Type: ${sap_instances_all_array[$i+2]} - JAVA Instance"
                 ;;
+            C)
+                echo "Instance Type: ${sap_instances_all_array[$i+2]} - Content Server"
+                ;;
             SMDA)
                 echo "Instance Type: ${sap_instances_all_array[$i+2]} - Solution Manager Diagnostics Instance"
                 ;;
@@ -635,6 +646,7 @@ function_system_stop(){
         local sap_instances_length=${#sap_instances_array[@]}
         local sap_java_instances_length=${#sap_java_instances_array[@]}
         local sap_hdb_systems_length=${#sap_hdb_systems_array[@]}
+        local sap_contentserver_systems_length=${#sap_contentserver_systems_array[@]}
         if [[ -z "$1" || "$1" = "all" || "$1" = "None" ]]; then         
             # Stop JAVA systems first
             for (( i=0; i<(${sap_java_systems_length}); i+=1 )); do 
@@ -677,6 +689,28 @@ function_system_stop(){
                         return 1
                     fi
                 done
+            done
+            # Then, stop Content Servers
+            
+            for (( i=0; i<(${sap_contentserver_systems_length}); i+=1 )); do 
+                local sid_lower=${sap_contentserver_systems_array[$i],,}                                   
+                local sys_num=""
+                
+                for (( j=0; j<(${sap_instances_length}); j+=5 )); do 
+                    if [[ "${sap_contentserver_systems_array[$i]}" == "${sap_instances_array[$j]}" ]]; then
+                        # echo "Found instance $j for system ${sap_systems_array[$i]}"
+                        sys_num=${sap_instances_array[$j+3]}
+                        # echo "System number: $sys_num"
+                        break            
+                    fi
+                done
+                echo "Stopping Content Server ==> ${sap_contentserver_systems_array[$i]}"
+                echo "Command: su - ${sid_lower}adm -c sapcontrol -nr ${sys_num} -function StopSystem WaitforStopped 180"
+                # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sap_systems_array[$i+3]} -function StopSystem WaitforStopped 180"
+                if [ $? -ne 0 ]; then
+                    echo "! Error stopping SAP system: ${sap_contentserver_systems_array[$i]}"
+                    return 1
+                fi
             done
             # Then, stop HDB systems if any
             for (( i=0; i<(${sap_hdb_systems_length}); i+=1 )); do 
