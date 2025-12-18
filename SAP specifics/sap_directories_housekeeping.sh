@@ -239,9 +239,11 @@ if [ "$files_to_zip_found" = "yes" ] || [ "$files_to_delete_found" = "yes" ]; th
 fi
 #cleanup temporary files
 rm /tmp/before_fs_usage /tmp/after_fs_usage
-
 exec 1>&1
 exec 2>&2
+
+# Cleanup logs older than 60 days
+find /tmp/ -name "sap_directories_housekeeping_*.log" -type f -mtime +60 -exec rm {} \;
 
 # # Temporarily redirecting both to standard output and file
 # {

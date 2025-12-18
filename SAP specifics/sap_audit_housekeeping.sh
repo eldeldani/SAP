@@ -174,6 +174,9 @@ fi
 #cleanup temporary files
 rm /tmp/before_fs_usage /tmp/after_fs_usage
 
+# Cleanup logs older than 60 days
+find /tmp/ -name "sap_audit_housekeeping_*.log" -type f -mtime +60 -exec rm {} \;
+
 if [ "$overall_exit_status" -eq 0 ]; then
     echo -e "$(date): Script completed successfully. Check log /tmp/sap_audit_housekeeping_$current_date.log for more details."
 else
