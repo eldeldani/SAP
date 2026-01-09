@@ -1,13 +1,13 @@
 ---
-- name: Deploy and execute SAP Directories Housekeeping script
+- name: Deploy and execute SAP Audit Housekeeping script
   hosts: "{{ target_hosts }}"
   become: yes
   vars:
     option: "" # Set to "execute" to run in execution mode, leave empty for test mode
   tasks:
-    - name: Execute SAP directories housekeeping script
+    - name: Execute SAP audit housekeeping script
       script:
-        cmd: /data/ansible-data/customer-data/scripts/sap_directories_housekeeping.sh {{ option }}
+        cmd: /data/ansible-data/customer-data/scripts/sap_audit_housekeeping.sh {{ option }}
       register: script_output
     - name: Display script output
       debug:

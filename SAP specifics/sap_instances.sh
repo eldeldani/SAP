@@ -82,6 +82,7 @@ declare saprouter_instance_found=0
 declare SAPROUTER_INFO_FILE="/tmp/saprouter_info.txt"
 declare SAPROUTER_STOPPED_WITH_SCRIPT="/tmp/saprouter_stopped_with_script.txt"
 
+
 function_find_sap_instances(){
     if ! [ -f /usr/sap/sapservices ]; then
         return 1
