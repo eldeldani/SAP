@@ -34,6 +34,7 @@ zip_days=730
 overall_exit_status=0
 # Redirect everything to log file
 current_date=$(date +%Y-%m-%d)
+exec 3>&1
 exec >> /tmp/sap_directories_housekeeping_$current_date.log 2>&1
 
 
@@ -248,12 +249,11 @@ find /tmp/ -name "sap_directories_housekeeping_*.log" -type f -mtime +60 -exec r
 # # Temporarily redirecting both to standard output and file
 # {
 if [ "$overall_exit_status" -eq 0 ]; then
-    echo -e "$(date): Script completed successfully. Check log /tmp/sap_directories_housekeeping_$current_date.log for more details."
+    echo -e "$(date): Script completed successfully. Check log /tmp/sap_directories_housekeeping_$current_date.log for more details." | tee /dev/fd/3
 else
-    echo -e "$(date): Script executed with errors, please check log /tmp/sap_directories_housekeeping_$current_date.log"
+    echo -e "$(date): Script executed with errors, please check log /tmp/sap_directories_housekeeping_$current_date.log" | tee /dev/fd/3
 fi
-# } | tee /dev/tty
-# #  //Temporarily redirecting both to standard output and file
+
 
 #Perform exit
 exit $overall_exit_status

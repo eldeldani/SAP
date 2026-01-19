@@ -18,6 +18,7 @@
 overall_exit_status=0
 # Redirect everything to log file
 current_date=$(date +%Y-%m-%d)
+exec 3>&1
 exec >> /tmp/sap_audit_housekeeping_$current_date.log 2>&1
 
 # (modifiable section)
@@ -178,12 +179,10 @@ rm /tmp/before_fs_usage /tmp/after_fs_usage
 find /tmp/ -name "sap_audit_housekeeping_*.log" -type f -mtime +60 -exec rm {} \;
 
 if [ "$overall_exit_status" -eq 0 ]; then
-    echo -e "$(date): Script completed successfully. Check log /tmp/sap_audit_housekeeping_$current_date.log for more details."
+    echo -e "$(date): Script completed successfully. Check log /tmp/sap_audit_housekeeping_$current_date.log for more details." | tee /dev/fd/3
 else
-    echo -e "$(date): Script executed with errors, please check log /tmp/sap_audit_housekeeping_$current_date.log"
+    echo -e "$(date): Script executed with errors, please check log /tmp/sap_audit_housekeeping_$current_date.log" | tee /dev/fd/3
 fi
 
 #Perform exit
 exit $overall_exit_status
-
-
