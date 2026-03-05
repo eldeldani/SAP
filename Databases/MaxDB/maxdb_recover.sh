@@ -73,6 +73,9 @@ while [ $loop -ne $end_nnn ]; do
         loop=$(($loop+1))
         echo "recover_replace LOG"$SID" /backup/maxdb/"$host"/"$SID"/autolog/LOG."$(printf "%03d" "$loop") >> $recovery_script
 done
+if [ "$until_date" == "0" ] && [ "$until_time" == "0" ]; then
+        echo "db_online" >> $recovery_script
+fi
 
 #echo "Backup template:"
 #echo "backup_template_create restore_$SID to "$concat" CONTENT DATA"
