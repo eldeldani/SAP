@@ -14,9 +14,9 @@ if [ "$#" -ne 9 ]; then
            i.e.: 20220621_020004
          - compressed: yes or no
          - files: number of files if multifile is used. Set to 1 if single file.
-         - until date: The until date you want for the recovery
+         - until date: The until date you want for the recovery. Set 0 if you do not want to set an until date.
            i.e.: 20220621
-         - until time: Then until time you want for the recovery
+         - until time: Then until time you want for the recovery. Set 0 if you do not want to set an until time.
            i.e.: 180000
          - start nnn: the log backup prefix required first after data recovery
          - end nnn: the last log backup prefix required for recovery
@@ -62,7 +62,11 @@ echo "db_connect" >> $recovery_script
 echo "util_execute clear log" >> $recovery_script
 echo "db_admin" >> $recovery_script
 echo "db_connect" >> $recovery_script
-echo "recover_start LOG"$SID" log "$start_nnn" until "$until_date" "$until_time >> $recovery_script
+if [ "$until_date" == "0" ] && [ "$until_time" == "0" ]; then
+        echo "recover_start LOG"$SID" log "$start_nnn >> $recovery_script
+else
+        echo "recover_start LOG"$SID" log "$start_nnn" until "$until_date" "$until_time >> $recovery_script
+fi
 #for ( i=$start_nnn; i<=$end_nnn; i++ ); do
 loop=$((start_nnn))
 while [ $loop -ne $end_nnn ]; do
