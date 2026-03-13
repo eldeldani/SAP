@@ -50,7 +50,7 @@
 exec > >(tee -a /tmp/sap_instances.sh.log) 2>&1
 
 # Test mode
-declare testexec=0
+declare testexec=1
 
 # Global arrays
 # - systems
@@ -597,13 +597,13 @@ function_instance_status(){
             result="$?"
             # Check the result and output accordingly
             if [[ "$result" = "4"  ]]; then
-                echo -e "${BOLD}STOPPED${RESET} - ${sap_instances_all_array[$idx]} --> ${sap_instances_all_array[$idx+1]}_${sap_instances_all_array[$idx+2]}${sap_instances_all_array[$idx+3]}_${sap_instances_all_array[$idx+4]}" 
+                echo -e "STOPPED - ${sap_instances_all_array[$idx]} --> ${sap_instances_all_array[$idx+1]}_${sap_instances_all_array[$idx+2]}${sap_instances_all_array[$idx+3]}_${sap_instances_all_array[$idx+4]}" 
                 overall_exit_status=1
             elif [[ "$result" = "2" || "$result" = "0"  ]]; then
-                echo -e "${YELLOW}PARTIALLY RUNNING${RESET} - ${sap_instances_all_array[$idx]} --> ${sap_instances_all_array[$idx+1]}_${sap_instances_all_array[$idx+2]}${sap_instances_all_array[$idx+3]}_${sap_instances_all_array[$idx+4]}" 
+                echo -e "PARTIALLY RUNNING - ${sap_instances_all_array[$idx]} --> ${sap_instances_all_array[$idx+1]}_${sap_instances_all_array[$idx+2]}${sap_instances_all_array[$idx+3]}_${sap_instances_all_array[$idx+4]}" 
                 overall_exit_status=1
             elif  [[ "$result" = "3" ]]; then 
-                echo -e "${GREEN}RUNNING${RESET} - ${sap_instances_all_array[$idx]} --> ${sap_instances_all_array[$idx+1]}_${sap_instances_all_array[$idx+2]}${sap_instances_all_array[$idx+3]}_${sap_instances_all_array[$idx+4]}"  
+                echo -e "RUNNING - ${sap_instances_all_array[$idx]} --> ${sap_instances_all_array[$idx+1]}_${sap_instances_all_array[$idx+2]}${sap_instances_all_array[$idx+3]}_${sap_instances_all_array[$idx+4]}"  
             fi
         done
     # Otherwise, show status for the specific SID
@@ -624,13 +624,13 @@ function_instance_status(){
                 result="$?"
                 # Check the result and output accordingly
                 if [[ "$result" = "4"  ]]; then
-                    echo -e "${BOLD}STOPPED${RESET} - ${sap_instances_all_array[$idx]} --> ${sap_instances_all_array[$idx+1]}_${sap_instances_all_array[$idx+2]}${sap_instances_all_array[$idx+3]}_${sap_instances_all_array[$idx+4]}" 
+                    echo -e "STOPPED - ${sap_instances_all_array[$idx]} --> ${sap_instances_all_array[$idx+1]}_${sap_instances_all_array[$idx+2]}${sap_instances_all_array[$idx+3]}_${sap_instances_all_array[$idx+4]}" 
                     instance_status_exit_status=1
                 elif [[ "$result" = "2" || "$result" = "0"  ]]; then
-                    echo -e "${YELLOW}PARTIALLY RUNNING${RESET} - ${sap_instances_all_array[$idx]} --> ${sap_instances_all_array[$idx+1]}_${sap_instances_all_array[$idx+2]}${sap_instances_all_array[$idx+3]}_${sap_instances_all_array[$idx+4]}" 
+                    echo -e "PARTIALLY RUNNING - ${sap_instances_all_array[$idx]} --> ${sap_instances_all_array[$idx+1]}_${sap_instances_all_array[$idx+2]}${sap_instances_all_array[$idx+3]}_${sap_instances_all_array[$idx+4]}" 
                     instance_status_exit_status=1
                 elif  [[ "$result" = "3" ]]; then 
-                    echo -e "${GREEN}RUNNING${RESET} - ${sap_instances_all_array[$idx]} --> ${sap_instances_all_array[$idx+1]}_${sap_instances_all_array[$idx+2]}${sap_instances_all_array[$idx+3]}_${sap_instances_all_array[$idx+4]}"  
+                    echo -e "RUNNING - ${sap_instances_all_array[$idx]} --> ${sap_instances_all_array[$idx+1]}_${sap_instances_all_array[$idx+2]}${sap_instances_all_array[$idx+3]}_${sap_instances_all_array[$idx+4]}"  
                 fi
             fi
         done
@@ -1339,21 +1339,27 @@ arg3=$3
 arg4=$4
 
 # Validate arg1 and command
+
+if [ "$testexec" -eq 0 ]; then
+    message="$(date): Script called with command: $command and option: $arg2"
+else
+    message="$(date): TEST MODE: Script called with command: $command and option: $arg2"
+fi
 case $command in
     instance_list)
-        echo "$(date): Script called with command: $command and option: $arg2"
+        echo $message
         function_instance_list $arg2
         ;;
     instance_status)
-        echo "$(date): Script called with command: $command and option: $arg2"
+        echo $message
         function_instance_status $arg2
         ;;
     instance_status_det)
-        echo "$(date): Script called with command: $command and option: $arg2"
+        echo $message
         function_instance_status_det $arg2
         ;;
     instance_version)
-        echo "$(date): Script called with command: $command and option: $arg2"
+        echo $message
         function_instance_version $arg2
         ;;
     system_stop)
@@ -1362,7 +1368,7 @@ case $command in
             function_display_help
             exit 1
         fi
-        echo "$(date): Script called with command: $command and option: $arg2"
+        echo $message
         function_system_stop $arg2
         ;;
     system_start)
@@ -1371,7 +1377,7 @@ case $command in
             function_display_help
             exit 1
         fi
-        echo "$(date): Script called with command: $command and option: $arg2"
+        echo $message
         function_system_start $arg2
         ;;
     system_restart)
@@ -1380,19 +1386,19 @@ case $command in
             function_display_help
             exit 1
         fi
-        echo "$(date): Script called with command: $command and option: $arg2"
+        echo $message
         function_system_restart $arg2
         ;;
     system_status)
-        echo "$(date): Script called with command: $command and option: $arg2"
+        echo $message
         function_system_status $arg2
         ;;
     db_list)
-        echo "$(date): Script called with command: $command and option: $arg2"
+        echo $message
         function_db_list
         ;;
     db_status)
-        echo "$(date): Script called with command: $command and option: $arg2"
+        echo $message
         function_db_status $arg2
         ;;
     db_stop)
@@ -1401,7 +1407,7 @@ case $command in
             function_display_help
             exit 1
         fi
-        echo "$(date): Script called with command: $command and option: $arg2"
+        echo $message
         function_db_stop $arg2
         ;;
     db_start)
@@ -1410,7 +1416,7 @@ case $command in
             function_display_help
             exit 1
         fi
-        echo "$(date): Script called with command: $command and option: $arg2"
+        echo $message
         function_db_start $arg2
         ;;
     db_restart)
@@ -1419,27 +1425,27 @@ case $command in
             function_display_help
             exit 1
         fi
-        echo "$(date): Script called with command: $command and option: $arg2"
+        echo $message
         function_db_restart $arg2
         ;;
     db_type)
-        echo "$(date): Script called with command: $command and option: $arg2"
+        echo $message
         function_db_type $arg2
         ;;
     all_stop)
-       echo "$(date): Script called with command: $command and option: $arg2"
+       echo $message
        function_all_stop
         ;;
     all_start)
-        echo "$(date): Script called with command: $command and option: $arg2"
+        echo $message
         function_all_start
         ;;
     all_restart)
-        echo "$(date): Script called with command: $command and option: $arg2"
+        echo $message
         function_all_restart
         ;;
     all_status)
-        echo "$(date): Script called with command: $command and option: $arg2"
+        echo $message
         function_all_status $arg2
         ;;
     # find_saprouter)
