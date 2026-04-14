@@ -406,7 +406,6 @@ function_db_stop(){
                         else
                             echo "$(date): [TEST MODE] /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $sid -dbtype $db_type"
                         fi
-                        /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $sid -dbtype $db_type
                         if [ $? -eq 0 ]; then
                             echo "$(date): === Database associated with instance $sid stopped successfully." 
                         else
@@ -417,7 +416,6 @@ function_db_stop(){
                             else
                                 echo "$(date): [TEST MODE] /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $sid -dbtype $db_type -force"
                             fi
-                            /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $sid -dbtype $db_type -force
                             if [ $? -eq 0 ]; then
                                 echo "$(date): === Database associated with instance $sid stopped successfully with force option."
                             else
@@ -439,8 +437,7 @@ function_db_stop(){
                     /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $db_name -dbtype $db_type
                 else
                     echo "$(date): [TEST MODE] /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $db_name -dbtype $db_type"
-                fi
-                
+                fi              
                 if [ $? -eq 0 ]; then
                     echo "$(date): === Database $db_name stopped successfully."
                 else
@@ -828,7 +825,11 @@ function_system_stop(){
                             echo "$(date): ! Error stopping $instance_type: ${sap_java_instances_array[$i]} --> ${sap_java_instances_array[$i+1]}_${sap_java_instances_array[$i+2]}${sap_java_instances_array[$i+3]}_${sap_java_instances_array[$i+4]}"
                             return 1
                         fi
-                        function_cleanipc "${sid_lower}" "${sys_num}"
+                        if [[ $testexec -eq 0 ]]; then
+                            function_cleanipc "${sid_lower}" "${sys_num}"
+                        else
+                            echo "$(date): [TEST MODE] function_cleanipc \"${sid_lower}\" \"${sys_num}\""
+                        fi
                     fi
                 done
                 # Stop SCS instances next
@@ -848,7 +849,11 @@ function_system_stop(){
                             echo "$(date): ! Error stopping $instance_type: ${sap_scs_instances_array[$i]} --> ${sap_scs_instances_array[$i+1]}_${sap_scs_instances_array[$i+2]}${sap_scs_instances_array[$i+3]}_${sap_scs_instances_array[$i+4]}"
                             return 1
                         fi
-                        function_cleanipc "${sid_lower}" "${sys_num}"      
+                        if [[ $testexec -eq 0 ]]; then
+                            function_cleanipc "${sid_lower}" "${sys_num}"
+                        else
+                            echo "$(date): [TEST MODE] function_cleanipc \"${sid_lower}\" \"${sys_num}\""
+                        fi
                     fi
                 done
             done
@@ -874,7 +879,11 @@ function_system_stop(){
                             echo "$(date): ! Error stopping $instance_type: ${sap_abap_instances_array[$i]} --> ${sap_abap_instances_array[$i+1]}_${sap_abap_instances_array[$i+2]}${sap_abap_instances_array[$i+3]}_${sap_abap_instances_array[$i+4]}"
                             return 1
                         fi  
-                        function_cleanipc "${sid_lower}" "${sys_num}"     
+                        if [[ $testexec -eq 0 ]]; then
+                            function_cleanipc "${sid_lower}" "${sys_num}"
+                        else
+                            echo "$(date): [TEST MODE] function_cleanipc \"${sid_lower}\" \"${sys_num}\""
+                        fi
                     fi
                 done
                 # Stop ASCS instances next
@@ -894,7 +903,11 @@ function_system_stop(){
                             echo "$(date): ! Error stopping $instance_type: ${sap_ascs_instances_array[$i]} --> ${sap_ascs_instances_array[$i+1]}_${sap_ascs_instances_array[$i+2]}${sap_ascs_instances_array[$i+3]}_${sap_ascs_instances_array[$i+4]}"
                             return 1
                         fi
-                        function_cleanipc "${sid_lower}" "${sys_num}"      
+                        if [[ $testexec -eq 0 ]]; then
+                            function_cleanipc "${sid_lower}" "${sys_num}"
+                        else
+                            echo "$(date): [TEST MODE] function_cleanipc \"${sid_lower}\" \"${sys_num}\""
+                        fi  
                     fi
                 done
             done
@@ -918,7 +931,11 @@ function_system_stop(){
                             echo "$(date): ! Error stopping $instance_type: ${sap_contentserver_instances_array[$i]} --> ${sap_contentserver_instances_array[$i+1]}_${sap_contentserver_instances_array[$i+2]}${sap_contentserver_instances_array[$i+3]}_${sap_contentserver_instances_array[$i+4]}"
                             return 1
                         fi
-                        function_cleanipc "${sid_lower}" "${sys_num}" 
+                        if [[ $testexec -eq 0 ]]; then
+                            function_cleanipc "${sid_lower}" "${sys_num}"
+                        else
+                            echo "$(date): [TEST MODE] function_cleanipc \"${sid_lower}\" \"${sys_num}\""
+                        fi
                     fi
                 done
             done
@@ -942,7 +959,11 @@ function_system_stop(){
                             echo "$(date): ! Error stopping $instance_type: ${sap_hdb_instances_array[$i]} --> ${sap_hdb_instances_array[$i+1]}_${sap_hdb_instances_array[$i+2]}${sap_hdb_instances_array[$i+3]}_${sap_hdb_instances_array[$i+4]}"
                             return 1
                         fi
-                        function_cleanipc "${sid_lower}" "${sys_num}"          
+                        if [[ $testexec -eq 0 ]]; then
+                            function_cleanipc "${sid_lower}" "${sys_num}"
+                        else
+                            echo "$(date): [TEST MODE] function_cleanipc \"${sid_lower}\" \"${sys_num}\""
+                        fi
                     fi
                 done
             done
@@ -966,7 +987,11 @@ function_system_stop(){
                             echo "$(date): ! Error stopping $instance_type: ${sap_java_instances_array[$i]} --> ${sap_java_instances_array[$i+1]}_${sap_java_instances_array[$i+2]}${sap_java_instances_array[$i+3]}_${sap_java_instances_array[$i+4]}"
                             return 1
                         fi
-                        function_cleanipc "${sid_lower}" "${sys_num}"
+                        if  [[ $testexec -eq 0 ]]; then
+                            function_cleanipc "${sid_lower}" "${sys_num}"
+                        else
+                            echo "$(date): [TEST MODE] function_cleanipc \"${sid_lower}\" \"${sys_num}\""
+                        fi
                 fi
             done
             for (( i=0; i<(${sap_abap_instances_length}); i+=5 )); do 
@@ -985,7 +1010,11 @@ function_system_stop(){
                             echo "$(date): ! Error stopping $instance_type: ${sap_abap_instances_array[$i]} --> ${sap_abap_instances_array[$i+1]}_${sap_abap_instances_array[$i+2]}${sap_abap_instances_array[$i+3]}_${sap_abap_instances_array[$i+4]}"
                             return 1
                         fi
-                        function_cleanipc "${sid_lower}" "${sys_num}"       
+                        if [[ $testexec -eq 0 ]]; then
+                            function_cleanipc "${sid_lower}" "${sys_num}"
+                        else
+                            echo "$(date): [TEST MODE] function_cleanipc \"${sid_lower}\" \"${sys_num}\""
+                        fi
                 fi
             done
             for (( i=0; i<(${sap_instances_length}); i+=5 )); do 
@@ -1005,7 +1034,11 @@ function_system_stop(){
                             echo "$(date): ! Error stopping $instance_type: ${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}"
                             return 1
                         fi
-                        function_cleanipc "${sid_lower}" "${sys_num}"           
+                        if [[ $testexec -eq 0 ]]; then
+                            function_cleanipc "${sid_lower}" "${sys_num}"
+                        else
+                            echo "$(date): [TEST MODE] function_cleanipc \"${sid_lower}\" \"${sys_num}\""
+                        fi       
                     fi
                 fi
             done
