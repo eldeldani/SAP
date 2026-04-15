@@ -50,7 +50,7 @@
 exec > >(tee -a /tmp/sap_instances.sh.log) 2>&1
 
 # Test mode
-declare testexec=1
+declare testexec=0
 
 # Global arrays
 # - systems
