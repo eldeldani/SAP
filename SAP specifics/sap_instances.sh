@@ -5,7 +5,7 @@
 # This script allows you to manage SAP instances and associated databases on a host.
 # Created by Daniel Munoz
 # For usage information, run:
-#   sap_instances.sh 
+#   sap_instances.sh
 # sap_instances.sh <command> [<option>]
 # <command> can be:
 #   instance_list [<SID>|all|<empty>]: 
@@ -36,7 +36,7 @@
 # sap_instances.sh system_stop <SID|all>
 # sap_instances.sh system_start <SID|all>
 # sap_instances.sh system_restart <SID|all>
-# sap_instances.sh db_list 
+# sap_instances.sh db_list
 # sap_instances.sh db_status <DBNAME|all|<empty>}
 # sap_instances.sh db_stop <DBNAME>
 # sap_instances.sh db_start <DBNAME>
@@ -223,7 +223,7 @@ function_find_db_systems(){
         # keep the filtered lines used by the script, stored in db_list_output
         local db_list_output
         db_list_output=$(printf "%s" "$raw_db_output" | grep "Database name")
-        if [[ -z "$db_list_output" ]]; then 
+        if [[ -z "$db_list_output" ]]; then
             # echo "No database instances found."
             return 1
         else
@@ -299,7 +299,7 @@ function_db_list(){
             echo "$db_sid"
         done
     fi
-}   
+}
 function_db_type(){
     if [ "$db_systems_found" -eq 0 ]; then
         echo "$(date): No database instances found."
@@ -350,7 +350,7 @@ db_type_friendly_name(){
     esac
 }
 # Does not work well with HANA databases
-function_db_status(){   
+function_db_status(){ 
     if [ "$db_systems_found" -eq 0 ]; then
         echo "$(date): No database instances found."
     else
@@ -389,7 +389,7 @@ function_db_stop(){
     if [ "$db_systems_found" -eq 0 ]; then
         echo "$(date): No database instances found to stop."
     else
-        if [[ "$db_name" = "ALL" ]]; then      
+        if [[ "$db_name" = "ALL" ]]; then   
             local db_status
             for sid in "${db_systems_array[@]}"; do
                 if ! db_status=$(function_db_status $sid); then
@@ -437,7 +437,7 @@ function_db_stop(){
                     /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $db_name -dbtype $db_type
                 else
                     echo "$(date): [TEST MODE] /usr/sap/hostctrl/exe/saphostctrl -function StopDatabase -dbname $db_name -dbtype $db_type"
-                fi              
+                fi
                 if [ $? -eq 0 ]; then
                     echo "$(date): === Database $db_name stopped successfully."
                 else
