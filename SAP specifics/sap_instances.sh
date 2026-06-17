@@ -8,6 +8,7 @@
 #   sap_instances.sh
 # sap_instances.sh <command> [<option>]
 # <command> can be:
+#   
 #   instance_list [<SID>|all|<empty>]: 
 #       lists all SAP instances found on the host
 #   instance_status [detail|<SID>|<empty>] [<SID>]: 
@@ -49,7 +50,7 @@
 # Output
 exec > >(tee -a /tmp/sap_instances.sh.log) 2>&1
 
-# Test mode
+# Test mode: Set to 1 for test mode (no actual start/stop commands executed), 0 for normal operation
 declare testexec=0
 
 # Global arrays
@@ -1514,7 +1515,7 @@ case $command in
     #     function_find_saprouters
     #     ;;
     *)
-        echo "$(date): ! Error: 'command' must be 'instance_list', 'instance_status', 'instance_status_det', 'instance_version', 'system_status', 'system_stop', 'system_start', 'system_restart', 'db_status', 'db_stop', 'db_start', 'db_restart', 'db_type', 'all_stop', 'all_start' or 'all_restart'"
+        echo "$(date): ! Error: Unknown command '$command'."
         function_display_help
         exit 1
         ;;
