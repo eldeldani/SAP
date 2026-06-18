@@ -102,7 +102,7 @@ salt -L 'HOST002.domain.net,HOST012.domain.net,HOST059.domain.net,HOST016.domain
 Solman-specific
 salt -L 'HOST007.domain.net,HOST038.domain.net' cmd.run "su - \`grep -m 1 '.*s2adm' /usr/sap/sapservices |awk '{print \$NF}'\` -c 'hdbsql -U DEFAULT -jx -F \";\" \"select PPMS_ID, COMPONENT_NAME, VERSION, COMPONENT_DESCRIPTION from LCM_SOFTWARE_COMPONENTS\"'"
 
-
+                    
 ℹ️ List unique SAP admin users in HOST
 grep adm /usr/sap/sapservices |grep -v SMD |awk '{print $NF}'|uniq
 

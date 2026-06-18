@@ -1,0 +1,57 @@
+=== Playbook example:
+
+---
+
+- name: Run df -h command on a Linux server
+  hosts: TYSV058*
+  become: yes  # Use this if you need elevated privileges
+  tasks:
+    - name: Check disk space
+      command: df -h
+      register: df_output
+    - name: Print disk space information
+      debug:
+        var: df_output.stdout
+
+
+Server inventory is dynamic using: /data/ansible-data/inventories/DMGMORI/snow.py
+
+We can check server inventory with:
+
+	/data/ansible-data/inventories/DMGMORI/snow.py --list
+
+    Or, generically:
+
+    /data/ansible-data/inventories/*/snow.py --list
+	
+The retrieved hosts come from SNOW:
+
+	i.e.: for TYSV058
+	"SRV000014645": {"hosts": ["TYSV058 - SAPTA1"]}
+
+A credential with the name retrieved from dynamic inventory snow.py, in example above "TYSV058 - SAPTA1" should be created under directory:
+
+	/data/ansible-data/inventories/DMGMORI/host_vars
+
+
+Encrypt credential.
+
+    1. Create file /data/ansible-data/inventories/DMGMORI/host_vars/<CI in SNOW>
+    ansible_user: nttrmadm
+    ansible_password: stichI&IP0og
+    ansible_become: yes
+    ansible_become_method: enable
+
+    2. Encrypt cred with 
+
+    bash /srv/ansible-data/scripts/encrypt_credentials/encrypt_credentials.sh /data/ansible-data/inventories/DMGMORI/host_vars/TYSV013*
+
+
+Commands
+
+Execute in all servers matching servers with SRV*_*sol*
+    
+    ansible -m shell -a "whoami" SRV*_*sol*
+
+
+
