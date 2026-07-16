@@ -1535,12 +1535,6 @@ if [ "$#" -lt 1 ] || [ "$1" = "help" ]; then
     function_display_help
     exit 0
 fi
-# Find SAP and DB systems
-function_find_sap_instances
-function_find_db_systems
-# Pendingn functions
-# function_find_saprouters
-# function_find_cloud_connectors
 
 # Assign arguments to variables
 command=$1
@@ -1548,10 +1542,19 @@ arg2=$2
 arg3=$3
 arg4=$4
 
+if [[ "$command" == "version" ]]; then
+    function_script_version
+    exit 0
+else
+    # Find SAP and DB systems
+    function_find_sap_instances
+    function_find_db_systems
+fi
+
 # Validate arg1 and command
 
 if [ "$testexec" -eq 0 ]; then
-    message="$(date): Script called with command: $command and option: $arg2"
+    message="NEW EXEC $(date): Script called with command: $command and option: $arg2"
 else
     message="$(date): TEST MODE: Script called with command: $command and option: $arg2"
 fi
