@@ -29,26 +29,13 @@
 #   all_restart: stops/starts all instances -including HANA intances- and non-HANA databases on the host
 # <option> is an optional parameter depending on the command used.
 
-# Example:
-# sap_instances.sh instance_list [<SID>|all|<empty>]
-# sap_instances.sh instance_status [detail|<SID>|<empty>] [<SID>]
-# sap_instances.sh instance_version [<SID>|<empty>]
-# sap_instances.sh system_status <SID|all>
-# sap_instances.sh system_stop <SID|all>
-# sap_instances.sh system_start <SID|all>
-# sap_instances.sh system_restart <SID|all>
-# sap_instances.sh db_list
-# sap_instances.sh db_status <DBNAME|all|<empty>}
-# sap_instances.sh db_stop <DBNAME>
-# sap_instances.sh db_start <DBNAME>
-# sap_instances.sh db_restart <DBNAME>
-# sap_instances.sh db_type <DBNAME>
-# sap_instances.sh all_stop
-# sap_instances.sh all_start
-# sap_instances.sh all_restart
-
 # Output
 exec > >(tee -a /tmp/sap_instances.sh.log) 2>&1
+
+# Script version
+declare SCRIPT_NAME="$(basename "$0")"
+declare SCRIPT_VERSION="2.0.1"
+declare SCRIPT_DATE="2026-07-17"
 
 # Test mode: Set to 1 for test mode (no actual start/stop commands executed), 0 for normal operation
 declare testexec=0
@@ -95,11 +82,6 @@ declare GREEN="\033[1;32m"
 declare BOLD="\033[1m"
 declare RVS="\033[7m"
 declare RESET="\033[0m"
-
-# Script version
-declare SCRIPT_NAME="$(basename "$0")"
-declare SCRIPT_VERSION="2.0.0"
-declare SCRIPT_DATE="2026-07-17"
 
 function_script_version(){
     echo "${SCRIPT_NAME} version ${SCRIPT_VERSION} (${SCRIPT_DATE})"
@@ -1552,27 +1534,28 @@ else
 fi
 
 # Validate arg1 and command
+NEWLINE=$'\n'
 
 if [ "$testexec" -eq 0 ]; then
-    message="NEW EXEC $(date): Script called with command: $command and option: $arg2"
+    message="${NEWLINE}${NEWLINE}--==> NEW EXECUTION <==---${NEWLINE}${NEWLINE}$(date): Script called with command: $command and option: $arg2"
 else
-    message="$(date): TEST MODE: Script called with command: $command and option: $arg2"
+    message="${NEWLINE}${NEWLINE}--==> NEW EXECUTION <==---${NEWLINE}${NEWLINE}$(date): TEST MODE: Script called with command: $command and option: $arg2"
 fi
 case $command in
     instance_list)
-        echo $message
+        echo "$message"
         function_instance_list $arg2
         ;;
     instance_status)
-        echo $message
+        echo "$message"
         function_instance_status $arg2
         ;;
     instance_status_det)
-        echo $message
+        echo "$message"
         function_instance_status_det $arg2
         ;;
     instance_version)
-        echo $message
+        echo "$message"
         function_instance_version $arg2
         ;;
     system_stop)
@@ -1581,7 +1564,7 @@ case $command in
             function_display_help
             exit 1
         fi
-        echo $message
+        echo "$message"
         function_system_stop $arg2
         ;;
     system_start)
@@ -1590,7 +1573,7 @@ case $command in
             function_display_help
             exit 1
         fi
-        echo $message
+        echo "$message"
         function_system_start $arg2
         ;;
     system_restart)
@@ -1599,19 +1582,19 @@ case $command in
             function_display_help
             exit 1
         fi
-        echo $message
+        echo "$message"
         function_system_restart $arg2
         ;;
     system_status)
-        echo $message
+        echo "$message"
         function_system_status $arg2
         ;;
     db_list)
-        echo $message
+        echo "$message"
         function_db_list
         ;;
     db_status)
-        echo $message
+        echo "$message"
         function_db_status $arg2
         ;;
     db_stop)
@@ -1620,7 +1603,7 @@ case $command in
             function_display_help
             exit 1
         fi
-        echo $message
+        echo "$message"
         function_db_stop $arg2
         ;;
     db_start)
@@ -1629,7 +1612,7 @@ case $command in
             function_display_help
             exit 1
         fi
-        echo $message
+        echo "$message"
         function_db_start $arg2
         ;;
     db_restart)
@@ -1638,31 +1621,31 @@ case $command in
             function_display_help
             exit 1
         fi
-        echo $message
+        echo "$message"
         function_db_restart $arg2
         ;;
     db_type)
-        echo $message
+        echo "$message"
         function_db_type $arg2
         ;;
     all_stop)
-       echo $message
+       echo "$message"
        function_all_stop $arg2
         ;;
     all_start)
-        echo $message
+        echo "$message"
         function_all_start $arg2
         ;;
     all_restart)
-        echo $message
+        echo "$message"
         function_all_restart $arg2
         ;;
     all_status)
-        echo $message
+        echo "$message"
         function_all_status $arg2
         ;;
     version)
-        echo $message
+        echo "$message"
         function_script_version
         ;;
     # find_saprouter)
