@@ -285,9 +285,9 @@ function_display_help(){
     echo "    db_start <DBNAME>: starts non-HANA database instances found on the host"
     echo "    db_restart <DBNAME>: restarts non-HANA database instances found on the host"
     echo "    db_type <DBNAME>: shows the type of database instances found on the host"
-    echo "    all_stop: stops all instances -including HANA instances- and non-HANA databases found on the host"
-    echo "    all_start: starts all instances -including HANA instances- and non-HANA databases found on the host"
-    echo "    all_restart: stops/starts all instances -including HANA intances- and non-HANA databases on the host"
+    echo "    all_stop [<SID>|all|<empty>]: stops all instances -including HANA instances- and non-HANA databases found on the host or only the instances associated with the given SID if provided"
+    echo "    all_start [<SID>|all|<empty>]: starts all instances -including HANA instances- and non-HANA databases found on the host or only the instances associated with the given SID if provided"
+    echo "    all_restart [<SID>|all|<empty>]: stops/starts all instances -including HANA intances- and non-HANA databases on the host or only the instances associated with the given SID if provided"
 
 }
 # DATABASE FUNCTIONS
@@ -424,6 +424,15 @@ function_db_stop(){
                                 db_stop_exit_status=1
                             fi
                         fi
+                        # Listeners are only relevant for Oracle databases and do not stop with saphostctrl command.
+                        if [[ "$db_type" == "ora" ]]; then
+                            if [[ $testexec -eq 0 ]]; then
+                                echo "$(date): === Stopping Oracle listener for database associated with instance $sid..."
+                                function_oracle_listener $sid stop
+                            else
+                                echo "$(date): [TEST MODE] === Stopping Oracle listener for database associated with instance $sid..."
+                            fi
+                        fi
                     fi
                 fi
             done
@@ -454,6 +463,15 @@ function_db_stop(){
                     else
                         echo "$(date): ! Error: Failed to stop database $db_name even with force option."
                         db_stop_exit_status=1
+                    fi
+                fi
+                # Listeners are only relevant for Oracle databases and do not stop with saphostctrl command.
+                if [[ "$db_type" == "ora" ]]; then
+                    if [[ $testexec -eq 0 ]]; then
+                        echo "$(date): === Stopping Oracle listener for database associated with instance $sid..."
+                        function_oracle_listener $sid stop
+                    else
+                        echo "$(date): [TEST MODE] === Stopping Oracle listener for database associated with instance $sid..."
                     fi
                 fi
             fi
@@ -502,6 +520,15 @@ function_db_start(){
                                 db_start_exit_status=1
                             fi
                         fi
+                        # Listeners are only relevant for Oracle databases and do not start with saphostctrl command.
+                        if [[ "$db_type" == "ora" ]]; then
+                            if [[ $testexec -eq 0 ]]; then
+                                echo "$(date): === Starting Oracle listener for database associated with instance $sid..."
+                                function_oracle_listener $sid start
+                            else
+                                echo "$(date): [TEST MODE] === Starting Oracle listener for database associated with instance $sid..."
+                            fi
+                        fi
                     fi
                 fi
             done
@@ -532,6 +559,15 @@ function_db_start(){
                     else
                         echo "$(date): ! Error: Failed to start database $db_name even with force option."
                         db_start_exit_status=1
+                    fi
+                fi
+                # Listeners are only relevant for Oracle databases and do not start with saphostctrl command.
+                if [[ "$db_type" == "ora" ]]; then
+                    if [[ $testexec -eq 0 ]]; then
+                        echo "$(date): === Starting Oracle listener for database associated with instance $sid..."
+                        function_oracle_listener $sid start
+                    else
+                        echo "$(date): [TEST MODE] === Starting Oracle listener for database associated with instance $sid..."
                     fi
                 fi
             fi
@@ -1347,30 +1383,72 @@ function_system_restart(){
 }
 # Stops SAP Systems and associated non-hdb databases
 function_all_stop(){
-    if ! function_system_stop all; then
-        echo "$(date): ! Error stopping SAP systems."
-        return 1
-    elif ! function_db_stop all; then
-        echo "$(date): ! Error stopping databases."
-        return 1
+    local sid="${1^^}"
+    if [[ -z "$sid" || "$sid" = "ALL" || "$sid" = "NONE" ]]; then
+        sid="ALL"
+    fi
+    if [[ "$sid" == "ALL" ]]; then
+        if ! function_system_stop all; then
+            echo "$(date): ! Error stopping SAP systems."
+            return 1
+        elif ! function_db_stop all; then
+            echo "$(date): ! Error stopping databases."
+            return 1
+        fi
+    else
+        if ! function_system_stop "$sid"; then
+            echo "$(date): ! Error stopping SAP systems associated with database $sid."
+            return 1
+        elif ! function_db_stop "$sid"; then
+            echo "$(date): ! Error stopping database $sid."
+            return 1
+        fi
     fi
 }
 function_all_start(){
-    if ! function_db_start all; then
-        echo "$(date): ! Error starting databases."
-        return 1
-    elif ! function_system_start all; then
-        echo "$(date): Error starting SAP systems."
-        return 1
+    local sid="${1^^}"
+    if [[ -z "$sid" || "$sid" = "ALL" || "$sid" = "NONE" ]]; then
+        sid="ALL"
+    fi
+    if [[ "$sid" == "ALL" ]]; then
+        if ! function_system_start all; then
+            echo "$(date): ! Error starting SAP systems."
+            return 1
+        elif ! function_db_start all; then
+            echo "$(date): ! Error starting databases."
+            return 1
+        fi
+    else
+        if ! function_system_start "$sid"; then
+            echo "$(date): ! Error starting SAP systems associated with database $sid."
+            return 1
+        elif ! function_db_start "$sid"; then
+            echo "$(date): ! Error starting database $sid."
+            return 1
+        fi
     fi
 }
 function_all_restart(){
-    if ! function_all_stop; then
-        echo "$(date): ! Error restarting all SAP systems and databases."
-        return 1
-    elif ! function_all_start; then
-        echo "$(date): ! Error restarting all SAP systems and databases."
-        return 1
+    local sid="${1^^}"
+    if [[ -z "$sid" || "$sid" = "ALL" || "$sid" = "NONE" ]]; then
+        sid="ALL"
+    fi
+    if [[ "$sid" == "ALL" ]]; then
+        if ! function_all_stop; then
+            echo "$(date): ! Error restarting all SAP systems and databases."
+            return 1
+        elif ! function_all_start; then
+            echo "$(date): ! Error restarting all SAP systems and databases."
+            return 1
+        fi
+    else
+        if ! function_all_stop "$sid"; then
+            echo "$(date): ! Error restarting SAP systems associated with database $sid."
+            return 1
+        elif ! function_all_start "$sid"; then
+            echo "$(date): ! Error restarting database $sid."
+            return 1
+        fi
     fi
 }
 function_all_status(){
@@ -1383,6 +1461,64 @@ function_all_status(){
     fi
     return $overall_exit_status
 }
+function_oracle_listener() {
+    # Variables
+    local SID ACTION ORA_USER LISTENER_NAME RC
+    SID="$1"
+    ACTION="$2"
+    # Validate number of arguments
+    [ $# -ne 2 ] && {
+        echo "ERROR: Usage: function_oracle_listener <SID> <check|start|stop>"
+        return 1
+    }
+    # Validate ACTION argument
+    case "$ACTION" in
+        check|start|stop) ;;
+        *)
+            echo "ERROR: Invalid action '$ACTION'"
+            return 1
+            ;;
+    esac
+    # Validate SID format (exactly 3 alphanumeric characters)
+    [[ ! "$SID" =~ ^[A-Z0-9]{3}$ ]] && {
+        echo "ERROR: SID must be exactly 3 alphanumeric characters"
+        return 2
+    }   
+
+    # Convert SID to uppercase, ACTION to lowercase, and construct ORA_USER in lowercase
+    SID="$(echo "$SID" | tr '[:lower:]' '[:upper:]')"
+    ACTION="$(echo "$ACTION" | tr '[:upper:]' '[:lower:]')"
+    ORA_USER="ora$(echo "$SID" | tr '[:upper:]' '[:lower:]')"    
+    
+    # Retrieve the listener name from the listener.ora file, defaulting to 'LISTENER' if not found
+    LISTENER_NAME=$(su - "$ORA_USER" -c "grep -iE '^[[:blank:]]*[[:alpha:]_][[:alnum:]_]*[[:blank:]]*=[[:blank:]]*\$' \"\$ORACLE_HOME/network/admin/listener.ora\" | grep -vi '^[[:blank:]]*SID' | awk -F= '{gsub(/[[:blank:]]/, \"\", \$1); print \$1}' | head -1")
+    [ -z "$LISTENER_NAME" ] && LISTENER_NAME='LISTENER'
+    
+    # Uncomment the following line for debugging purposes
+    # echo "variables: SID=$SID, ACTION=$ACTION, ORA_USER=$ORA_USER, LISTENER_NAME=$LISTENER_NAME"
+
+    # Main logic to perform the specified action on the Oracle listener
+    case "$ACTION" in
+            check)
+                echo "Checking status of listener '$LISTENER_NAME' for SID '$SID'..."
+                echo "Command: su - \"$ORA_USER\" -c \"lsnrctl status ${LISTENER_NAME}\""
+                su - "$ORA_USER" -c "lsnrctl status ${LISTENER_NAME}"
+                ;;
+            start)
+                echo "Starting listener '$LISTENER_NAME' for SID '$SID'..."
+                echo "Command: su - \"$ORA_USER\" -c \"lsnrctl start ${LISTENER_NAME}\""
+                su - "$ORA_USER" -c "lsnrctl start ${LISTENER_NAME}"
+                ;;
+            stop)
+                echo "Stopping listener '$LISTENER_NAME' for SID '$SID'..."
+                echo "Command: su - \"$ORA_USER\" -c \"lsnrctl stop ${LISTENER_NAME}\""
+                su - "$ORA_USER" -c "lsnrctl stop ${LISTENER_NAME}"
+                ;;
+        esac
+    RC=$?
+    return $RC
+}
+
 
 ## Main script logic
 # Check if the number of arguments is correct
@@ -1499,15 +1635,15 @@ case $command in
         ;;
     all_stop)
        echo $message
-       function_all_stop
+       function_all_stop $arg2
         ;;
     all_start)
         echo $message
-        function_all_start
+        function_all_start $arg2
         ;;
     all_restart)
         echo $message
-        function_all_restart
+        function_all_restart $arg2
         ;;
     all_status)
         echo $message
