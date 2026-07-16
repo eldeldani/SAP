@@ -96,6 +96,14 @@ declare BOLD="\033[1m"
 declare RVS="\033[7m"
 declare RESET="\033[0m"
 
+# Script version
+declare SCRIPT_NAME="$(basename "$0")"
+declare SCRIPT_VERSION="2.0.0"
+declare SCRIPT_DATE="2026-07-17"
+
+function_script_version(){
+    echo "${SCRIPT_NAME} version ${SCRIPT_VERSION} (${SCRIPT_DATE})"
+}
 function_find_sap_instances(){
     if ! [ -f /usr/sap/sapservices ]; then
         return 1
@@ -288,6 +296,7 @@ function_display_help(){
     echo "    all_stop [<SID>|all|<empty>]: stops all instances -including HANA instances- and non-HANA databases found on the host or only the instances associated with the given SID if provided"
     echo "    all_start [<SID>|all|<empty>]: starts all instances -including HANA instances- and non-HANA databases found on the host or only the instances associated with the given SID if provided"
     echo "    all_restart [<SID>|all|<empty>]: stops/starts all instances -including HANA intances- and non-HANA databases on the host or only the instances associated with the given SID if provided"
+    echo "    version: shows the version of this script"
 
 }
 # DATABASE FUNCTIONS
@@ -1411,19 +1420,19 @@ function_all_start(){
         sid="ALL"
     fi
     if [[ "$sid" == "ALL" ]]; then
-        if ! function_system_start all; then
-            echo "$(date): ! Error starting SAP systems."
-            return 1
-        elif ! function_db_start all; then
+        if ! function_db_start all; then
             echo "$(date): ! Error starting databases."
+            return 1
+        elif ! function_system_start all; then
+            echo "$(date): ! Error starting SAP systems."
             return 1
         fi
     else
-        if ! function_system_start "$sid"; then
-            echo "$(date): ! Error starting SAP systems associated with database $sid."
-            return 1
-        elif ! function_db_start "$sid"; then
+        if ! function_db_start "$sid"; then
             echo "$(date): ! Error starting database $sid."
+            return 1
+        elif ! function_system_start "$sid"; then
+            echo "$(date): ! Error starting SAP systems associated with database $sid."
             return 1
         fi
     fi
@@ -1648,6 +1657,10 @@ case $command in
     all_status)
         echo $message
         function_all_status $arg2
+        ;;
+    version)
+        echo $message
+        function_script_version
         ;;
     # find_saprouter)
     #     function_find_saprouters
