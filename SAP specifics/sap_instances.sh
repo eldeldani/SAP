@@ -32,6 +32,9 @@
 # Output
 exec > >(tee -a /tmp/sap_instances.sh.log) 2>&1
 
+# Set TERM variable to xterm-256color for better color support in terminal output
+export TERM=xterm-256color
+
 # Script version
 declare SCRIPT_NAME="$(basename "$0")"
 declare SCRIPT_VERSION="2.0.3"

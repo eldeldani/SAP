@@ -54,4 +54,7 @@ Execute in all servers matching servers with SRV*_*sol*
     ansible -m shell -a "whoami" SRV*_*sol*
 
 
+Execute playbook
 
+ansible-playbook -i /data/ansible-data/inventories/DMGMORI/snow.py /data/ansible-data/customer-data/playbooks/sap_directories_cleanup.yml --extra-vars "target_hosts=TYSV058*"
+ansible-playbook -i /data/ansible-data/inventories/DMGMORI/snow.py /data/ansible-data/customer-data/playbooks/sap_instances.yml --extra-vars "target_hosts=TYSV096* command=all_status SID=all"
