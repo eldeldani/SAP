@@ -1627,7 +1627,7 @@ case $command in
         echo "$message"
         function_all_status $arg2
         ;;
-    version)
+    version|-v|--version|-version)
         echo "$message"
         function_script_version
         ;;
