@@ -7,27 +7,7 @@
 # For usage information, run:
 #   sap_instances.sh
 # sap_instances.sh <command> [<option>]
-# <command> can be:
-#   
-#   instance_list [<SID>|all|<empty>]: 
-#       lists all SAP instances found on the host
-#   instance_status [detail|<SID>|<empty>] [<SID>]: 
-#       shows the status of SAP instances found on the host
-#   instance_version [<SID>|<empty>]:
-#       shows the version of SAP instances found on the host
-#   system_stop: stops SAP systems found on the host without the database. In case of HANA databases, the database will be stopped as part of the instance stop.
-#   system_start: starts SAP systems found on the host without the database. In case of HANA databases, the database will be started as part of the instance start.
-#   system_restart: restarts SAP systems found on the host without the database. In case of HANA databases, the database will be restarted as part of the instance restart.
-#   db_list: lists all database systems found on the host.
-#   db_status: shows the status of database instances found on the host
-#   db_stop: stops non-HANA database instances found on the host
-#   db_start: starts non-HANA database instances found on the host
-#   db_restart: restarts non-HANA database instances found on the host
-#   db_type: shows the type of database instances found on the host
-#   all_stop: stops all instances -including HANA instances- and non-HANA databases found on the host
-#   all_start: starts all instances -including HANA instances- and non-HANA databases found on the host
-#   all_restart: stops/starts all instances -including HANA intances- and non-HANA databases on the host
-# <option> is an optional parameter depending on the command used.
+
 
 # Output
 exec > >(tee -a /tmp/sap_instances.sh.log) 2>&1
@@ -37,8 +17,8 @@ export TERM=xterm-256color
 
 # Script version
 declare SCRIPT_NAME="$(basename "$0")"
-declare SCRIPT_VERSION="2.0.4"
-declare SCRIPT_DATE="2026-07-17"
+declare SCRIPT_VERSION="2.0.5"
+declare SCRIPT_DATE="2026-07-21"
 
 # Test mode: Set to 1 for test mode (no actual start/stop commands executed), 0 for normal operation
 declare testexec=0
@@ -1650,6 +1630,10 @@ case $command in
     version)
         echo "$message"
         function_script_version
+        ;;
+    help || -h || --help || -help || "-?")
+        function_display_help
+        exit 0
         ;;
     # find_saprouter)
     #     function_find_saprouters
