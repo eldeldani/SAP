@@ -8,7 +8,6 @@
 #   sap_instances.sh
 # sap_instances.sh <command> [<option>]
 
-
 # Output
 exec > >(tee -a /tmp/sap_instances.sh.log) 2>&1
 
@@ -262,6 +261,7 @@ function_display_help(){
     echo "    all_start [<SID>|all|<empty>]: starts all instances -including HANA instances- and non-HANA databases found on the host or only the instances associated with the given SID if provided"
     echo "    all_restart [<SID>|all|<empty>]: stops/starts all instances -including HANA intances- and non-HANA databases on the host or only the instances associated with the given SID if provided"
     echo "    version: shows the version of this script"
+    echo "    help: shows this help message"
 
 }
 # DATABASE FUNCTIONS
@@ -1631,7 +1631,7 @@ case $command in
         echo "$message"
         function_script_version
         ;;
-    help || -h || --help || -help || "-?")
+    help || -h || --help || -help )
         function_display_help
         exit 0
         ;;
