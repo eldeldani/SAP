@@ -1631,7 +1631,7 @@ case $command in
         echo "$message"
         function_script_version
         ;;
-    help || -h || --help || -help )
+    help || -h || --help || -help)
         function_display_help
         exit 0
         ;;
