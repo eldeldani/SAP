@@ -37,7 +37,7 @@ export TERM=xterm-256color
 
 # Script version
 declare SCRIPT_NAME="$(basename "$0")"
-declare SCRIPT_VERSION="2.0.3"
+declare SCRIPT_VERSION="2.0.4"
 declare SCRIPT_DATE="2026-07-17"
 
 # Test mode: Set to 1 for test mode (no actual start/stop commands executed), 0 for normal operation
