@@ -16,8 +16,8 @@ export TERM=xterm-256color
 
 # Script version
 declare SCRIPT_NAME="$(basename "$0")"
-declare SCRIPT_VERSION="2.0.5"
-declare SCRIPT_DATE="2026-07-21"
+declare SCRIPT_VERSION="2.0.7"
+declare SCRIPT_DATE="2026-07-23"
 
 # Test mode: Set to 1 for test mode (no actual start/stop commands executed), 0 for normal operation
 declare testexec=0
@@ -1492,7 +1492,10 @@ function_oracle_listener() {
     RC=$?
     return $RC
 }
-
+function_load_config() {
+    function_find_sap_instances
+    function_find_db_systems
+}
 
 ## Main script logic
 # Check if the number of arguments is correct
@@ -1507,13 +1510,9 @@ arg2=$2
 arg3=$3
 arg4=$4
 
-if [[ "$command" == "version" ]]; then
+if [[ "$command" == "version" || "$command" == "-version" || "$command" == "-v" ]]; then
     function_script_version
     exit 0
-else
-    # Find SAP and DB systems
-    function_find_sap_instances
-    function_find_db_systems
 fi
 
 # Validate arg1 and command
@@ -1526,22 +1525,27 @@ else
 fi
 case $command in
     instance_list)
+        function_load_config
         echo "$message"
         function_instance_list $arg2
         ;;
     instance_status)
+        function_load_config
         echo "$message"
         function_instance_status $arg2
         ;;
     instance_status_det)
+        function_load_config
         echo "$message"
         function_instance_status_det $arg2
         ;;
     instance_version)
+        function_load_config
         echo "$message"
         function_instance_version $arg2
         ;;
     system_stop)
+        function_load_config
         if [[ -z "$arg2" ]]; then
             echo "$(date): ! Error: 'option' is required for 'system_stop' command."
             function_display_help
@@ -1551,6 +1555,7 @@ case $command in
         function_system_stop $arg2
         ;;
     system_start)
+        function_load_config
         if [[ -z "$arg2" ]]; then
             echo "$(date): ! Error: 'option' is required for 'system_start' command."
             function_display_help
@@ -1560,6 +1565,7 @@ case $command in
         function_system_start $arg2
         ;;
     system_restart)
+        function_load_config
         if [[ -z "$arg2" ]]; then   
             echo "$(date): ! Error: 'option' is required for 'system_restart' command."
             function_display_help
@@ -1569,18 +1575,22 @@ case $command in
         function_system_restart $arg2
         ;;
     system_status)
+        function_load_config
         echo "$message"
         function_system_status $arg2
         ;;
     db_list)
+        function_load_config
         echo "$message"
         function_db_list
         ;;
     db_status)
+        function_load_config
         echo "$message"
         function_db_status $arg2
         ;;
     db_stop)
+        function_load_config
         if [[ -z "$arg2" ]]; then
             echo "$(date): ! Error: 'option' is required for 'db_stop' command."
             function_display_help
@@ -1590,6 +1600,7 @@ case $command in
         function_db_stop $arg2
         ;;
     db_start)
+        function_load_config
         if [[ -z "$arg2" ]]; then
             echo "$(date): ! Error: 'option' is required for 'db_start' command."
             function_display_help
@@ -1599,6 +1610,7 @@ case $command in
         function_db_start $arg2
         ;;
     db_restart)
+        function_load_config
         if [[ -z "$arg2" ]]; then
             echo "$(date): ! Error: 'option' is required for 'db_restart' command."
             function_display_help
@@ -1608,28 +1620,37 @@ case $command in
         function_db_restart $arg2
         ;;
     db_type)
+        function_load_config
         echo "$message"
         function_db_type $arg2
         ;;
     all_stop)
-       echo "$message"
-       function_all_stop $arg2
+        function_load_config
+        echo "$message"
+        function_all_stop $arg2
         ;;
     all_start)
+        function_load_config
         echo "$message"
         function_all_start $arg2
         ;;
     all_restart)
+        function_load_config
         echo "$message"
         function_all_restart $arg2
         ;;
     all_status)
+        function_load_config
         echo "$message"
         function_all_status $arg2
         ;;
     version|-v|--version|-version)
         echo "$message"
         function_script_version
+        ;;
+    help|-h|--help|-help)
+        echo "$message"
+        function_display_help
         ;;
     # find_saprouter)
     #     function_find_saprouters
