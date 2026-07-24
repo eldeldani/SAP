@@ -16,8 +16,8 @@ export TERM=xterm-256color
 
 # Script version
 declare SCRIPT_NAME="$(basename "$0")"
-declare SCRIPT_VERSION="2.0.7"
-declare SCRIPT_DATE="2026-07-23"
+declare SCRIPT_VERSION="2.0.8"
+declare SCRIPT_DATE="2026-07-24"
 
 # Test mode: Set to 1 for test mode (no actual start/stop commands executed), 0 for normal operation
 declare testexec=0
@@ -243,26 +243,65 @@ function_instance_type(){
 }
 # DISPLAY HELP FUNCTION
 function_display_help(){
-    echo "Usage: $0 <command> [<option>]"
-    echo "  <command> must be one of the following:"
-    echo "    instance_list [<SID>|all|<empty>]: lists all SAP instances found on the host"
-    echo "    instance_status [detail|<SID>|<empty>] [<SID>]: shows the status of SAP instances found on the host for the given SID or all instances if no SID is provided"
-    echo "    instance_version [<SID>|<empty>]: shows the version of SAP instances found on the host for the given SID or all instances if no SID is provided"
-    echo "    system_stop <SID|all>: stops SAP systems found on the host without the database. In case of HANA databases, the database will be stopped as part of the instance stop. If JAVA instances are found, they will be stopped first followed by ABAP instances. IF ASCS/SCS instances are found, they will be stopped last. If HDB instances are found, they will be stopped lasts."
-    echo "    system_start <SID|all>: starts SAP systems found on the host without the database. In case of HANA databases, the database will be started as part of the instance start."
-    echo "    system_restart <SID|all>: restarts SAP systems found on the host without the database. In case of HANA databases, the database will be restarted as part of the instance restart."
-    echo "    db_list: lists all database systems found on the host."
-    echo "    db_status <DBNAME|all|<empty>}: shows the status of database instances found on the host"
-    echo "    db_stop <DBNAME>: stops non-HANA database instances found on the host"
-    echo "    db_start <DBNAME>: starts non-HANA database instances found on the host"
-    echo "    db_restart <DBNAME>: restarts non-HANA database instances found on the host"
-    echo "    db_type <DBNAME>: shows the type of database instances found on the host"
-    echo "    all_stop [<SID>|all|<empty>]: stops all instances -including HANA instances- and non-HANA databases found on the host or only the instances associated with the given SID if provided"
-    echo "    all_start [<SID>|all|<empty>]: starts all instances -including HANA instances- and non-HANA databases found on the host or only the instances associated with the given SID if provided"
-    echo "    all_restart [<SID>|all|<empty>]: stops/starts all instances -including HANA intances- and non-HANA databases on the host or only the instances associated with the given SID if provided"
-    echo "    version: shows the version of this script"
-    echo "    help: shows this help message"
+cat <<EOF
+Usage:
+  ${0} <command> [<options>]
 
+SAP instance commands:
+  instance_list [<SID>|all|<empty>]
+    Lists all SAP instances found on the host
+  instance_status [detail|<SID>|<empty>]
+    Shows the status of SAP instances found on the host for the given SID or all instances if no SID is provided
+  instance_version [<SID>|<empty>]
+    Shows the version of SAP instances found on the host for the given SID or all instances if no SID is provided
+  system_stop <SID|all>
+    Stops SAP systems found on the host without the database. In case of HANA databases, the database will be stopped as part of the instance stop. If JAVA instances are found, they will be stopped first followed by ABAP instances. IF ASCS/SCS instances are found, they will be stopped last. If HDB instances are found, they will be stopped lasts.
+  system_start <SID|all>
+    Starts SAP systems found on the host without the database. In case of HANA databases, the database will be started as part of the instance start.
+  system_restart <SID|all>
+    Restarts SAP systems found on the host without the database. In case of HANA databases, the database will be restarted as part of the instance restart.
+  
+Database commands:
+  db_list
+    Lists all database systems found on the host.
+  db_status <DBNAME|all|<empty>}
+    Shows the status of database instances found on the host
+  db_stop <DBNAME>
+    Stops non-HANA database instances found on the host
+  db_start <DBNAME>
+    Starts non-HANA database instances found on the host
+  db_restart <DBNAME>
+    Restarts non-HANA database instances found on the host
+  db_type <DBNAME>
+    Shows the type of database instances found on the host
+  all_stop [<SID>|all|<empty>]
+    Stops all instances -including HANA instances- and non-HANA databases found on the host or only the instances associated with the given SID if provided
+  all_start [<SID>|all|<empty>]
+    Starts all instances -including HANA instances- and non-HANA databases found on the host or only the instances associated with the given SID if provided
+  all_restart [<SID>|all|<empty>]
+    Restarts all instances -including HANA intances- and non-HANA databases on the host or only the instances associated with the given SID if provided
+  
+Other commands:
+  version
+    Shows the version of this script
+  help
+    Shows this help message
+
+Examples:
+    ${0} instance_list
+    ${0} instance_status
+    ${0} instance_status <SID>
+    ${0} system_stop <SID>
+    ${0} system_start <SID>
+    ${0} system_restart <SID>
+    ${0} db_list
+    ${0} db_status
+    ${0} db_status <DBNAME>
+    ${0} db_stop <DBNAME>
+    ${0} db_start <DBNAME>
+    ${0} db_restart <DBNAME>
+ 
+EOF
 }
 # DATABASE FUNCTIONS
 function_db_list(){
@@ -271,7 +310,7 @@ function_db_list(){
         return 1
     else
         for db_sid in "${db_systems_array[@]}"; do
-            echo "$db_sid"
+            echo "$db_sid : $(db_type_friendly_name $(function_db_type $db_sid))" 
         done
     fi
 }
@@ -302,7 +341,7 @@ function_db_type(){
 db_type_friendly_name(){
     case $1 in
     hdb)
-        echo "HANA"
+        echo "SAP HANA"
         ;;
     ora)
         echo "Oracle"
@@ -313,11 +352,8 @@ db_type_friendly_name(){
     syb)
         echo "SAP ASE (Sybase)"
         ;;
-    ada)
-        echo "MaxDB"
-        ;;
-    sap)
-        echo "MaxDB"
+    ada|sap)
+        echo "SAP MaxDB"
         ;;
     *)
         echo "Unknown"
@@ -344,6 +380,7 @@ function_db_status(){
                 echo "$(date): ! Error: Unable to determine database type for $db_name"
                 return 1
             else
+                echo "$(date): Command: /usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname $db_name -dbtype $db_type"
                 result_all=$(/usr/sap/hostctrl/exe/saphostctrl -function GetDatabaseStatus -dbname $db_name -dbtype $db_type )
                 result_short=$(echo "$result_all" |head -1|awk '{ print $3 }')
                 if [ ! $? -eq 0 ]; then
@@ -1519,9 +1556,9 @@ fi
 NEWLINE=$'\n'
 
 if [ "$testexec" -eq 0 ]; then
-    message="${NEWLINE}${NEWLINE}$(date): --> NEW EXECUTION <--${NEWLINE}$(date): $(function_script_version)${NEWLINE}$(date): Script called with command: $command and option: $arg2"
+    message="$(date): --> NEW EXECUTION <--${NEWLINE}$(date): $(function_script_version)${NEWLINE}$(date): Script called with command: $command and option: $arg2"
 else
-    message="${NEWLINE}${NEWLINE}$(date): --> NEW EXECUTION IN TEST MODE !!<--${NEWLINE}$(date): $(function_script_version)${NEWLINE}$(date): Script called with command: $command and option: $arg2"
+    message="$(date): --> NEW EXECUTION IN TEST MODE !!<--${NEWLINE}$(date): $(function_script_version)${NEWLINE}$(date): Script called with command: $command and option: $arg2"
 fi
 case $command in
     instance_list)
