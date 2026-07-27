@@ -16,8 +16,8 @@ export TERM=xterm-256color
 
 # Script version
 declare SCRIPT_NAME="$(basename "$0")"
-declare SCRIPT_VERSION="2.0.8"
-declare SCRIPT_DATE="2026-07-24"
+declare SCRIPT_VERSION="2.0.9"
+declare SCRIPT_DATE="2026-07-27"
 
 # Test mode: Set to 1 for test mode (no actual start/stop commands executed), 0 for normal operation
 declare testexec=0
@@ -866,13 +866,13 @@ function_system_stop(){
                         local instance_type=$(function_instance_type "${sap_java_instances_array[$j+2]}")
                         echo "$(date): Stopping $instance_type ==> ${sap_java_systems_array[$i]} -> ${sap_java_instances_array[$j+1]}_${sap_java_instances_array[$j+2]}${sap_java_instances_array[$j+3]}_${sap_java_instances_array[$j+4]}"
                         # echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
                             # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartService ${SID}"
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 600 10"
                         else
                             # echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error stopping $instance_type: ${sap_java_instances_array[$i]} --> ${sap_java_instances_array[$i+1]}_${sap_java_instances_array[$i+2]}${sap_java_instances_array[$i+3]}_${sap_java_instances_array[$i+4]}"
@@ -893,13 +893,13 @@ function_system_stop(){
                         local instance_type=$(function_instance_type "${sap_scs_instances_array[$j+2]}")
                         echo "$(date): Stopping $instance_type ==> ${sap_java_systems_array[$i]} -> ${sap_scs_instances_array[$j+1]}_${sap_scs_instances_array[$j+2]}${sap_scs_instances_array[$j+3]}_${sap_scs_instances_array[$j+4]}"
                         # echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
                             # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartService ${SID}"
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 600 10"
                         else
                             # echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error stopping $instance_type: ${sap_scs_instances_array[$i]} --> ${sap_scs_instances_array[$i+1]}_${sap_scs_instances_array[$i+2]}${sap_scs_instances_array[$i+3]}_${sap_scs_instances_array[$i+4]}"
@@ -926,13 +926,13 @@ function_system_stop(){
                         local instance_type=$(function_instance_type "${sap_abap_instances_array[$j+2]}")
                         echo "$(date): Stopping $instance_type ==> ${sap_abap_systems_array[$i]} -> ${sap_abap_instances_array[$j+1]}_${sap_abap_instances_array[$j+2]}${sap_abap_instances_array[$j+3]}_${sap_abap_instances_array[$j+4]}"
                         # echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
                             # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartService ${SID}"
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 600 10"
                         else
                             # echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error stopping $instance_type: ${sap_abap_instances_array[$i]} --> ${sap_abap_instances_array[$i+1]}_${sap_abap_instances_array[$i+2]}${sap_abap_instances_array[$i+3]}_${sap_abap_instances_array[$i+4]}"
@@ -953,13 +953,13 @@ function_system_stop(){
                         # echo "System number: $sys_num"
                         echo "$(date): Stopping $instance_type ==> ${sap_abap_systems_array[$i]} -> ${sap_ascs_instances_array[$j+1]}_${sap_ascs_instances_array[$j+2]}${sap_ascs_instances_array[$j+3]}_${sap_ascs_instances_array[$j+4]}"
                         # echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
                             # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartService ${SID}"
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 600 10"
                         else
                             # echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error stopping $instance_type: ${sap_ascs_instances_array[$i]} --> ${sap_ascs_instances_array[$i+1]}_${sap_ascs_instances_array[$i+2]}${sap_ascs_instances_array[$i+3]}_${sap_ascs_instances_array[$i+4]}"
@@ -985,13 +985,13 @@ function_system_stop(){
                         local instance_type=$(function_instance_type "${sap_contentserver_instances_array[$j+2]}")
                         echo "$(date): Stopping $instance_type ==> ${sap_contentserver_systems_array[$i]} -> ${sap_contentserver_instances_array[$j+1]}_${sap_contentserver_instances_array[$j+2]}${sap_contentserver_instances_array[$j+3]}_${sap_contentserver_instances_array[$j+4]}"
                         # echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
                             # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartService ${SID}"
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 600 10"
                         else
                             # echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error stopping $instance_type: ${sap_contentserver_instances_array[$i]} --> ${sap_contentserver_instances_array[$i+1]}_${sap_contentserver_instances_array[$i+2]}${sap_contentserver_instances_array[$i+3]}_${sap_contentserver_instances_array[$i+4]}"
@@ -1017,13 +1017,13 @@ function_system_stop(){
                         local instance_type=$(function_instance_type "${sap_hdb_instances_array[$j+2]}")
                         echo "$(date): Stopping $instance_type ==> ${sap_hdb_instances_array[$i]} --> ${sap_hdb_instances_array[$i+1]}_${sap_hdb_instances_array[$i+2]}${sap_hdb_instances_array[$i+3]}_${sap_hdb_instances_array[$i+4]}"
                         # echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
                             # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartService ${SID}"
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 600 10"
                         else
                             # echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error stopping $instance_type: ${sap_hdb_instances_array[$i]} --> ${sap_hdb_instances_array[$i+1]}_${sap_hdb_instances_array[$i+2]}${sap_hdb_instances_array[$i+3]}_${sap_hdb_instances_array[$i+4]}"
@@ -1048,13 +1048,13 @@ function_system_stop(){
                         local instance_type=$(function_instance_type "${sap_java_instances_array[$i+2]}")
                         echo "$(date): Stopping $instance_type ==> $1 --> ${sap_java_instances_array[$i+1]}_${sap_java_instances_array[$i+2]}${sap_java_instances_array[$i+3]}_${sap_java_instances_array[$i+4]}"
                         # echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
                             # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartService ${SID}"
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 600 10"
                         else
                             # echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error stopping $instance_type: ${sap_java_instances_array[$i]} --> ${sap_java_instances_array[$i+1]}_${sap_java_instances_array[$i+2]}${sap_java_instances_array[$i+3]}_${sap_java_instances_array[$i+4]}"
@@ -1074,13 +1074,13 @@ function_system_stop(){
                         local instance_type=$(function_instance_type "${sap_abap_instances_array[$i+2]}")
                         echo "$(date): Stopping $instance_type ==> $1 --> ${sap_abap_instances_array[$i+1]}_${sap_abap_instances_array[$i+2]}${sap_abap_instances_array[$i+3]}_${sap_abap_instances_array[$i+4]}"
                         # echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
                             # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartService ${SID}"
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 600 10"
                         else
                             # echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error stopping $instance_type: ${sap_abap_instances_array[$i]} --> ${sap_abap_instances_array[$i+1]}_${sap_abap_instances_array[$i+2]}${sap_abap_instances_array[$i+3]}_${sap_abap_instances_array[$i+4]}"
@@ -1101,13 +1101,13 @@ function_system_stop(){
                         local instance_type=$(function_instance_type "${sap_instances_array[$i+2]}")
                         echo "$(date): Stopping $instance_type instance ==> $1 --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}"
                         # echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
                             # su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartService ${SID}"
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StopWait 600 10"
                         else
                             # echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartService ${SID}\""
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StopWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error stopping $instance_type: ${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}"
@@ -1154,11 +1154,11 @@ function_system_start(){
                         sys_num=${sap_hdb_instances_array[$j+3]}
                         local instance_type=$(function_instance_type "${sap_hdb_instances_array[$j+2]}")
                         echo "$(date): Starting $instance_type ==> ${sap_hdb_instances_array[$i]} --> ${sap_hdb_instances_array[$i+1]}_${sap_hdb_instances_array[$i+2]}${sap_hdb_instances_array[$i+3]}_${sap_hdb_instances_array[$i+4]}"
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 600 10"
                         else
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error starting $instance_type: ${sap_hdb_instances_array[$i]} --> ${sap_hdb_instances_array[$i+1]}_${sap_hdb_instances_array[$i+2]}${sap_hdb_instances_array[$i+3]}_${sap_hdb_instances_array[$i+4]}"
@@ -1179,11 +1179,11 @@ function_system_start(){
                         local instance_type=$(function_instance_type "${sap_ascs_instances_array[$j+2]}")
                         # echo "System number: $sys_num"
                         echo "$(date): Starting $instance_type ==> ${sap_abap_systems_array[$i]} -> ${sap_ascs_instances_array[$j+1]}_${sap_ascs_instances_array[$j+2]}${sap_ascs_instances_array[$j+3]}_${sap_ascs_instances_array[$j+4]}"
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 600 10"
                         else
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error starting $instance_type: ${sap_ascs_instances_array[$i]} --> ${sap_ascs_instances_array[$i+1]}_${sap_ascs_instances_array[$i+2]}${sap_ascs_instances_array[$i+3]}_${sap_ascs_instances_array[$i+4]}"
@@ -1216,11 +1216,11 @@ function_system_start(){
                             return 1
                         fi
                         echo "$(date): Starting $instance_type ==> ${sap_abap_systems_array[$i]} -> ${sap_abap_instances_array[$j+1]}_${sap_abap_instances_array[$j+2]}${sap_abap_instances_array[$j+3]}_${sap_abap_instances_array[$j+4]}"
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 600 10"
                         else
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error starting $instance_type: ${sap_abap_instances_array[$i]} --> ${sap_abap_instances_array[$i+1]}_${sap_abap_instances_array[$i+2]}${sap_abap_instances_array[$i+3]}_${sap_abap_instances_array[$i+4]}"
@@ -1241,11 +1241,11 @@ function_system_start(){
                         sys_num=${sap_scs_instances_array[$j+3]}
                         local instance_type=$(function_instance_type "${sap_scs_instances_array[$j+2]}")
                         echo "$(date): Starting $instance_type ==> ${sap_java_systems_array[$i]} -> ${sap_scs_instances_array[$j+1]}_${sap_scs_instances_array[$j+2]}${sap_scs_instances_array[$j+3]}_${sap_scs_instances_array[$j+4]}"
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 600 10"
                         else
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error starting $instance_type: ${sap_scs_instances_array[$i]} --> ${sap_scs_instances_array[$i+1]}_${sap_scs_instances_array[$i+2]}${sap_scs_instances_array[$i+3]}_${sap_scs_instances_array[$i+4]}"
@@ -1259,11 +1259,11 @@ function_system_start(){
                         sys_num=${sap_java_instances_array[$j+3]}
                         local instance_type=$(function_instance_type "${sap_java_instances_array[$j+2]}")
                         echo "$(date): Starting $instance_type ==> ${sap_java_systems_array[$i]} -> ${sap_java_instances_array[$j+1]}_${sap_java_instances_array[$j+2]}${sap_java_instances_array[$j+3]}_${sap_java_instances_array[$j+4]}"
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 600 10"
                         else
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error starting $instance_type: ${sap_java_instances_array[$i]} --> ${sap_java_instances_array[$i+1]}_${sap_java_instances_array[$i+2]}${sap_java_instances_array[$i+3]}_${sap_java_instances_array[$i+4]}"
@@ -1283,11 +1283,11 @@ function_system_start(){
                         sys_num=${sap_contentserver_instances_array[$j+3]}
                         local instance_type=$(function_instance_type "${sap_contentserver_instances_array[$j+2]}")
                         echo "$(date): Starting $instance_type ==> ${sap_contentserver_systems_array[$i]} -> ${sap_contentserver_instances_array[$j+1]}_${sap_contentserver_instances_array[$j+2]}${sap_contentserver_instances_array[$j+3]}_${sap_contentserver_instances_array[$j+4]}"
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 600 10"
                         else
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error starting $instance_type: ${sap_contentserver_instances_array[$i]} --> ${sap_contentserver_instances_array[$i+1]}_${sap_contentserver_instances_array[$i+2]}${sap_contentserver_instances_array[$i+3]}_${sap_contentserver_instances_array[$i+4]}"
@@ -1307,11 +1307,11 @@ function_system_start(){
                     if [[ "${sap_instances_array[$i+2]}" != D* && "${sap_instances_array[$i+2]}" != "J" ]]; then
                         local instance_type=$(function_instance_type "${sap_instances_array[$i+2]}")
                         echo "$(date): Starting $instance_type instance ==> $1 --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}"
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 600 10"
                         else
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error starting $instance_type: ${sap_instances_array[$i]} --> ${sap_instances_array[$i+1]}_${sap_instances_array[$i+2]}${sap_instances_array[$i+3]}_${sap_instances_array[$i+4]}"
@@ -1345,11 +1345,11 @@ function_system_start(){
                             return 1
                         fi
                         echo "$(date): Starting $instance_type ==> $1 --> ${sap_abap_instances_array[$i+1]}_${sap_abap_instances_array[$i+2]}${sap_abap_instances_array[$i+3]}_${sap_abap_instances_array[$i+4]}"
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 600 10"
                         else
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error starting $instance_type: ${sap_abap_instances_array[$i]} --> ${sap_abap_instances_array[$i+1]}_${sap_abap_instances_array[$i+2]}${sap_abap_instances_array[$i+3]}_${sap_abap_instances_array[$i+4]}"
@@ -1363,11 +1363,11 @@ function_system_start(){
                         sys_num=${sap_java_instances_array[$i+3]}
                         local instance_type=$(function_instance_type "${sap_java_instances_array[$i+2]}")
                         echo "$(date): Starting $instance_type ==> $1 --> ${sap_java_instances_array[$i+1]}_${sap_java_instances_array[$i+2]}${sap_java_instances_array[$i+3]}_${sap_java_instances_array[$i+4]}"
-                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                        echo "$(date): Command: su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         if [[ $testexec -eq 0 ]]; then
-                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 300 10"
+                            su - ${sid_lower}"adm" -c "sapcontrol -nr ${sys_num} -function StartWait 600 10"
                         else
-                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 300 10\""
+                            echo "$(date): [TEST MODE] su - ${sid_lower}adm -c \"sapcontrol -nr ${sys_num} -function StartWait 600 10\""
                         fi
                         if [ $? -ne 0 ]; then
                             echo "$(date): ! Error starting $instance_type: ${sap_java_instances_array[$i]} --> ${sap_java_instances_array[$i+1]}_${sap_java_instances_array[$i+2]}${sap_java_instances_array[$i+3]}_${sap_java_instances_array[$i+4]}"
