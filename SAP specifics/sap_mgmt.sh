@@ -20,7 +20,6 @@ declare -a sap_contentserver_instances_array=()
 declare -a sap_ascs_instances_array=()
 declare -a sap_scs_instances_array=()
 
-# Database type cache, populated by find_db_systems.
 declare -A db_types_cache=()
 
 declare -i sap_instances_found=0
@@ -32,10 +31,8 @@ log() {
 
 trim() {
     local value=$1
-
     value=${value#"${value%%[![:space:]]*}"}
     value=${value%"${value##*[![:space:]]}"}
-
     printf '%s' "$value"
 }
 
@@ -242,12 +239,6 @@ db_type() {
     return 1
 }
 
-# Usage:
-#   oracle_listener <SID> <check|start|stop>
-#
-# The listener name is read from $ORACLE_HOME/network/admin/listener.ora
-# as the Oracle SID owner. If no listener name can be determined, LISTENER
-# is used as the Oracle default.
 oracle_listener() {
     local sid=${1^^}
     local action=${2,,}
@@ -276,10 +267,10 @@ oracle_listener() {
 
     ora_user="ora${sid,,}"
 
-    if ! id "$ora_user" &>/dev/null; then
-        log "! Error: Oracle operating-system user '$ora_user' does not exist."
+    id "$ora_user" &>/dev/null || {
+        log "! Error: Oracle user '$ora_user' does not exist."
         return 1
-    fi
+    }
 
     discovery_command='
         listener_file="$ORACLE_HOME/network/admin/listener.ora"
@@ -299,6 +290,8 @@ oracle_listener() {
         fi
     '
 
+    log "Command: su - $ora_user -c \"Oracle listener discovery from \$ORACLE_HOME/network/admin/listener.ora\""
+
     listener_name=$(su - "$ora_user" -c "$discovery_command" 2>/dev/null)
     listener_name=$(trim "$listener_name")
     [[ -n $listener_name ]] || listener_name="LISTENER"
@@ -308,7 +301,6 @@ oracle_listener() {
     case $action in
         check)
             log "Checking Oracle listener '$listener_name' for SID '$sid'."
-
             log "Command: su - $ora_user -c \"$listener_command\""
             su - "$ora_user" -c "$listener_command"
             ;;
@@ -494,7 +486,6 @@ db_action_one() {
         return 1
     }
 
-    # Oracle listener must be running before starting an Oracle database.
     if [[ $action == Start && ${db_type_code,,} == ora ]]; then
         oracle_listener "$db_name" start || {
             log "! Error: Oracle listener could not be started for SID '$db_name'."
@@ -668,14 +659,62 @@ instance_version() {
     done
 }
 
+wait_for_db_connectivity() {
+    local sid=${1^^}
+    local instance_label_text=$2
+    local sid_lower=${sid,,}
+    local r3trans_command="R3trans -d"
+    local -i attempt
+    local -i max_attempts=60
+    local -i wait_seconds=10
+
+    log "Checking database connectivity before starting ABAP instance: $instance_label_text"
+
+    for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+        log "Attempt $attempt/$max_attempts: checking database connectivity using R3trans -d."
+        log "Command: su - ${sid_lower}adm -c \"$r3trans_command\""
+
+        if su - "${sid_lower}adm" -c "$r3trans_command" >/dev/null 2>&1; then
+            log "SAP application user '${sid_lower}adm' can connect to the database."
+            return 0
+        fi
+
+        if ((attempt < max_attempts)); then
+            log "R3trans -d failed. Waiting $wait_seconds seconds before retrying."
+            read -rt "$wait_seconds" _ || true
+        fi
+    done
+
+    log "! Error: database connectivity was not established within 10 minutes."
+    return 1
+}
+
 start_instance() {
     local array_name=$1
     local index=$2
     local -n records=$array_name
 
+    local sid=${records[index]}
+    local instance_type=${records[index + 2]}
+    local instance_number=${records[index + 3]}
+    local label
+
+    label=$(instance_label "$array_name" "$index")
+
+    case $instance_type in
+        D|DVEBMGS)
+            wait_for_db_connectivity "$sid" "$label" || {
+                log "! Error: skipping startup of ABAP instance: $label"
+                return 1
+            }
+            ;;
+    esac
+
+    log "Starting $(instance_description "$instance_type") ==> $label"
+
     run_disruptive_as_sidadm \
-        "${records[index]}" \
-        "sapcontrol -nr ${records[index + 3]} -function StartWait 300 10"
+        "$sid" \
+        "sapcontrol -nr $instance_number -function StartWait 300 10"
 }
 
 stop_instance() {
@@ -741,15 +780,24 @@ system_restart() {
 }
 
 all_stop() {
-    system_stop all && db_stop all
+    local requested_sid=${1:-all}
+
+    system_stop "$requested_sid" &&
+        db_stop "$requested_sid"
 }
 
 all_start() {
-    db_start all && system_start all
+    local requested_sid=${1:-all}
+
+    db_start "$requested_sid" &&
+        system_start "$requested_sid"
 }
 
 all_restart() {
-    all_stop && all_start
+    local requested_sid=${1:-all}
+
+    all_stop "$requested_sid" &&
+        all_start "$requested_sid"
 }
 
 all_status() {
@@ -769,6 +817,8 @@ all_status() {
 
         return "$status"
     fi
+
+    log "=== Checking status for SAP system: ${requested_sid^^}"
 
     instance_status "$requested_sid" || status=1
     db_status_for_sid "$requested_sid" || status=1
@@ -796,9 +846,9 @@ display_help() {
         "  db_start <DBNAME|all>" \
         "  db_restart <DBNAME|all>" \
         "  db_type <DBNAME>" \
-        "  all_stop" \
-        "  all_start" \
-        "  all_restart" \
+        "  all_stop [SID|all]" \
+        "  all_start [SID|all]" \
+        "  all_restart [SID|all]" \
         "  all_status [SID|all]"
 }
 
@@ -811,7 +861,7 @@ command=$1
 option=${2:-}
 
 case $command in
-    instance_list|instance_status|instance_status_det|instance_version|system_status|db_status|db_status_det|db_type|all_status)
+    instance_list|instance_status|instance_status_det|instance_version|system_status|db_status|db_status_det|db_type|all_status|all_stop|all_start|all_restart)
         (($# <= 2)) || {
             log "! Error: too many arguments for '$command'."
             display_help
@@ -825,7 +875,7 @@ case $command in
             exit 1
         }
         ;;
-    db_list|all_stop|all_start|all_restart)
+    db_list)
         (($# == 1)) || {
             log "! Error: command '$command' does not accept arguments."
             display_help
@@ -916,17 +966,17 @@ case $command in
     all_stop)
         find_sap_instances
         find_db_systems
-        all_stop
+        all_stop "$option"
         ;;
     all_start)
         find_sap_instances
         find_db_systems
-        all_start
+        all_start "$option"
         ;;
     all_restart)
         find_sap_instances
         find_db_systems
-        all_restart
+        all_restart "$option"
         ;;
     all_status)
         find_sap_instances
