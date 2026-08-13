@@ -1,26 +1,74 @@
 #!/bin/bash
 
-# Define the threshold
-SID=$1
-THRESHOLD=$2
+PATH='/usr/sbin:/usr/bin:/sbin:/bin'
+export PATH
+LC_ALL=C
+export LC_ALL
 
-# Define the filesystem path
-FILESYSTEM="/oracle/"$SID"/oraarch"
+SID=${1:-}
+THRESHOLD=${2:-}
 
-while true; do
-# Get the filesystem usage percentage
-USAGE=$(df -h $FILESYSTEM | awk 'NR==2 {print $5}' | sed 's/%//')
-
-# Check if usage is above the threshold
-if [ "$USAGE" -gt "$THRESHOLD" ]; then
-    echo "$(date): Filesystem "$FILESYSTEM" usage is "$USAGE"% which is above "$THRESHOLD"%"
-    echo "$(date): Deleting files"
-    echo "$(date): Command:"
-    echo "$(date): find $FILESYSTEM -name "*.dbf" -mmin +60 -delete"
-    find $FILESYSTEM -name "*.dbf" -mmin +60 -delete
-else
-    echo "$(date): Filesystem usage for "$FILESYSTEM" is "$USAGE"% which is LOWER than "$THRESHOLD""
+if [ -z "$SID" ] || [ -z "$THRESHOLD" ]; then
+    echo "$(date '+%F %T'): ERROR: Usage: $0 <SID> <threshold_percentage>" >&2
+    exit 2
 fi
-echo "$(date): Waiting for 1 minute..."
-sleep 60
-done
+
+case "$SID" in
+    [[:alnum:]][[:alnum:]][[:alnum:]]) ;;
+    *)
+        echo "$(date '+%F %T'): ERROR: Invalid SID: $SID" >&2
+        exit 2
+        ;;
+esac
+
+case "$THRESHOLD" in
+    ''|*[!0-9]*)
+        echo "$(date '+%F %T'): ERROR: Threshold must be a numeric percentage." >&2
+        exit 2
+        ;;
+esac
+
+if [ "$THRESHOLD" -lt 1 ] || [ "$THRESHOLD" -gt 100 ]; then
+    echo "$(date '+%F %T'): ERROR: Threshold must be between 1 and 100." >&2
+    exit 2
+fi
+
+FILESYSTEM="/oracle/${SID}/oraarch"
+
+if [ ! -d "$FILESYSTEM" ]; then
+    echo "$(date '+%F %T'): ERROR: Directory does not exist: $FILESYSTEM" >&2
+    exit 2
+fi
+
+# -P gives a predictable one-line-per-filesystem output format.
+USAGE=$(
+    df -P -k "$FILESYSTEM" 2>/dev/null |
+    awk 'NR == 2 { gsub(/%/, "", $5); print $5 }'
+)
+
+case "$USAGE" in
+    ''|*[!0-9]*)
+        echo "$(date '+%F %T'): ERROR: Could not determine filesystem usage for $FILESYSTEM" >&2
+        exit 1
+        ;;
+esac
+
+echo "$(date '+%F %T'): SID=$SID THRESHOLD=$THRESHOLD FILESYSTEM=$FILESYSTEM USAGE=${USAGE}%"
+
+if [ "$USAGE" -gt "$THRESHOLD" ]; then
+    echo "$(date '+%F %T'): Filesystem usage is above threshold; deleting .dbf files older than 60 minutes."
+
+    # First, log which files are going to be removed.
+    find "$FILESYSTEM" -type f -name '*.dbf' -mmin +60 -print
+
+    # Then delete them.
+    find "$FILESYSTEM" -type f -name '*.dbf' -mmin +60 -delete
+    rc=$?
+
+    if [ "$rc" -ne 0 ]; then
+        echo "$(date '+%F %T'): ERROR: File deletion failed; rc=$rc" >&2
+        exit "$rc"
+    fi
+else
+    echo "$(date '+%F %T'): Filesystem usage is at or below threshold; no files deleted."
+fi
