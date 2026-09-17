@@ -1206,8 +1206,8 @@ function_system_start(){
                                 db_connectivity=1
                                 break
                             else
-                                echo "$(date): R3trans -d failed. Waiting 10s before retrying..."
-                                sleep 10
+                                echo "$(date): R3trans -d failed. Waiting 20s before retrying..."
+                                sleep 20
                             fi
                         done
                         if [ $db_connectivity -ne 1 ]; then
