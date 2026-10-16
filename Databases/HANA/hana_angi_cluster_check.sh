@@ -2,20 +2,28 @@
 #
 # hana_angi_cluster_preflight.sh
 #
-# Read-only validation for an active/passive SAP HANA System Replication
-# cluster on SLES for SAP Applications using:
-#   - SAPHanaSR-angi
-#   - Pacemaker / Corosync
-#   - Azure Fence Agent
-#   - Azure Load Balancer
+# Read-only validation for SAP HANA on SLES for SAP Applications with
+# Pacemaker, SAPHanaSR-angi, Azure Fence Agent, and Azure Load Balancer.
 #
-# Run as root on each HANA cluster node:
+# The script supports two modes automatically:
+#
+#   1. Basic cluster mode
+#      Used when HANA System Replication and HANA cluster resources have not
+#      yet been configured. It validates the Pacemaker, fencing, OS, packages,
+#      networking, and HANA installation prerequisites.
+#
+#   2. HANA active/passive validation mode
+#      Activated automatically when SAPHanaSR-angi HANA resources are found.
+#      It validates SAPHanaTopology, SAPHanaController, virtual IP, azure-lb,
+#      colocation, active/passive roles, and resource placement.
+#
+# Run as root on each cluster node:
 #   ./hana_angi_cluster_preflight.sh
 #
 # Optional overrides:
 #   ./hana_angi_cluster_preflight.sh --sid PPR --instance 00 --sites SITE1,SITE2
 #
-# The script does not change HANA, Pacemaker, Azure, fencing, or networking.
+# This script does not alter HANA, Pacemaker, Azure, fencing, or networking.
 
 set -uo pipefail
 
@@ -23,6 +31,7 @@ SID=""
 INSTANCE=""
 SITES=""
 GLOBAL_INI=""
+HSR_CONFIGURED=false
 FAILURES=0
 WARNINGS=0
 
@@ -33,12 +42,13 @@ Usage:
 
 Default behavior:
   - Detects HANA SID and instance number from /usr/sap/<SID>/HDB<NN>.
-  - Detects HANA SR sites from /etc/sudoers.d/20-saphana.
+  - Runs basic Pacemaker validation even if HANA SR is not configured.
+  - Detects and validates HANA active/passive resources when present.
 
 Options:
   --sid <SID>              Override detected SID.
   --instance <NN>          Override detected instance number.
-  --sites <SITE1,SITE2>    Override detected HANA SR sites.
+  --sites <SITE1,SITE2>    Optional HANA SR site override.
   --global-ini <path>      Override default global.ini location.
   -h, --help               Display this help text.
 
@@ -76,7 +86,7 @@ check_service_active() {
     fi
 }
 
-# crm configure get_property returns the value directly.
+# crm configure get_property returns the property value directly.
 get_cluster_property() {
     local property="$1"
     local value
@@ -95,7 +105,7 @@ check_resource_agent() {
     fi
 }
 
-# SLES for SAP is identified through SUSE product metadata.
+# Detect SLES for SAP Applications from SUSE product metadata.
 is_sles_for_sap() {
     local product_file
 
@@ -111,7 +121,7 @@ is_sles_for_sap() {
     return 1
 }
 
-# Detect /usr/sap/<SID>/HDB<NN>. Supports directories and symbolic links.
+# Detects /usr/sap/<SID>/HDB<NN>. Supports directories and symbolic links.
 detect_hana_installation() {
     local path detected_sid detected_instance
     local -a installations=()
@@ -137,7 +147,6 @@ detect_hana_installation() {
     if [[ ${#installations[@]} -eq 0 ]]; then
         fail "Could not auto-detect a HANA installation below /usr/sap"
         info "Expected a path such as /usr/sap/<SID>/HDB<NN>"
-        info "Run: ls -ld /usr/sap/*/HDB*"
         return 1
     fi
 
@@ -152,16 +161,14 @@ detect_hana_installation() {
     return 0
 }
 
-# Detect HANA SR site names from SAPHanaSR-angi sudoers hook attributes.
+# Detect HANA SR sites from SAPHanaSR-angi sudoers hook attributes.
+# This is optional. It must not prevent basic Pacemaker validation.
 detect_hsr_sites() {
     local sudoers_file="/etc/sudoers.d/20-saphana"
     local site_prefix
     local -a detected_sites=()
 
-    if [[ ! -r "$sudoers_file" ]]; then
-        fail "Cannot auto-detect HSR sites because ${sudoers_file} is missing or unreadable"
-        return 1
-    fi
+    [[ -r "$sudoers_file" ]] || return 1
 
     site_prefix="hana_${SID_LOWER}_site_srHook_"
 
@@ -172,18 +179,14 @@ detect_hsr_sites() {
     )
 
     if [[ ${#detected_sites[@]} -ne 2 ]]; then
-        fail "Expected exactly two HSR sites, but detected: ${detected_sites[*]:-none}"
-        info "Use --sites SITE1,SITE2 if the sudoers file uses a non-standard format"
         return 1
     fi
 
     SITES="${detected_sites[0]},${detected_sites[1]}"
-    pass "Auto-detected HSR sites: ${SITES}"
     return 0
 }
 
-# Extract a complete CRM object, including continuation lines, from the
-# output stored in /tmp/crm_config.$$.
+# Extracts a complete Pacemaker object definition including continuation lines.
 crm_object_block() {
     local object_id="$1"
 
@@ -204,17 +207,8 @@ crm_object_block() {
     ' /tmp/crm_config.$$
 }
 
-# Extract node names from crm_mon output.
-# Supports both:
-#   * Promoted: [ node ]
-#   * Masters:  [ node ]
-
-# Extract node names from crm_mon output.
-# Supports both:
-#   * Promoted: [ node ]
-#   * Masters:  [ node ]
-#
-# The result is trimmed so comparisons against resource hosting nodes work.
+# Extracts role node names from crm_mon output and trims surrounding whitespace.
+# Supports both modern Promoted/Unpromoted and older Masters/Slaves labels.
 get_crm_role_nodes() {
     local first_label="$1"
     local second_label="$2"
@@ -223,21 +217,15 @@ get_crm_role_nodes() {
     awk -v first_label="$first_label" -v second_label="$second_label" '
         $0 ~ "(" first_label "|" second_label "):[[:space:]]*\\[" {
             line = $0
-
-            # Keep only the text inside the square brackets.
             sub(/^.*\[/, "", line)
             sub(/\].*$/, "", line)
-
-            # Remove leading and trailing whitespace before returning the node.
             gsub(/^[[:space:]]+/, "", line)
             gsub(/[[:space:]]+$/, "", line)
-
             print line
             exit
         }
     ' "$crm_mon_file"
 }
-
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -294,35 +282,42 @@ fi
 SID="${SID^^}"
 SID_LOWER="${SID,,}"
 
-if [[ -z "$SITES" ]]; then
-    detect_hsr_sites || exit 2
-fi
-
-IFS=',' read -r -a SITE_ARRAY <<< "$SITES"
-
-if [[ ${#SITE_ARRAY[@]} -ne 2 ]] ||
-   [[ -z "${SITE_ARRAY[0]}" ]] ||
-   [[ -z "${SITE_ARRAY[1]}" ]]; then
-    printf 'Exactly two HSR sites are required, for example: SITE1,SITE2.\n' >&2
-    exit 2
-fi
-
 if [[ -z "$GLOBAL_INI" ]]; then
     GLOBAL_INI="/hana/shared/${SID}/global/hdb/custom/config/global.ini"
+fi
+
+# Sites are optional until HANA SR hooks are configured.
+if [[ -z "$SITES" ]]; then
+    if detect_hsr_sites; then
+        HSR_CONFIGURED=true
+        IFS=',' read -r -a SITE_ARRAY <<< "$SITES"
+        pass "Auto-detected HSR sites: ${SITES}"
+    else
+        SITE_ARRAY=()
+        info "HANA SR hook sudoers configuration was not found; basic Pacemaker validation mode is active"
+    fi
+else
+    IFS=',' read -r -a SITE_ARRAY <<< "$SITES"
+
+    if [[ ${#SITE_ARRAY[@]} -ne 2 ]] ||
+       [[ -z "${SITE_ARRAY[0]}" ]] ||
+       [[ -z "${SITE_ARRAY[1]}" ]]; then
+        printf 'Exactly two HSR sites are required, for example: SITE1,SITE2.\n' >&2
+        exit 2
+    fi
+
+    HSR_CONFIGURED=true
 fi
 
 HOST="$(hostname -s)"
 
 printf '\n============================================================\n'
 printf 'HANA SAPHanaSR-angi cluster preflight\n'
-printf 'Host: %s | SID: %s | Instance: HDB%s | Sites: %s\n' \
-    "$HOST" "$SID" "$INSTANCE" "$SITES"
+printf 'Host: %s | SID: %s | Instance: HDB%s\n' "$HOST" "$SID" "$INSTANCE"
 printf '============================================================\n'
 
-info "This script is read-only. It does not alter CRM, HANA, Azure, or fencing configuration."
-
 # ===========================================================================
-# Operating system and base command checks
+# Operating system and required commands
 # ===========================================================================
 printf '\n--- Operating system and base commands ---\n'
 
@@ -360,9 +355,9 @@ else
 fi
 
 # ===========================================================================
-# SAPHanaSR-angi, HANA, Pacemaker, and Corosync
+# HANA installation, packages, and base Pacemaker cluster
 # ===========================================================================
-printf '\n--- SAPHanaSR-angi and base cluster prerequisites ---\n'
+printf '\n--- HANA, SAPHanaSR-angi, and Pacemaker prerequisites ---\n'
 
 if rpm_installed "SAPHanaSR-angi"; then
     pass "SAPHanaSR-angi package installed: $(rpm -q SAPHanaSR-angi)"
@@ -508,9 +503,9 @@ while read -r cluster_node; do
 done < <(crm_node -l 2>/dev/null | awk '{print $2}')
 
 # ===========================================================================
-# HANA storage, replication, HA/DR hooks, and sudoers
+# HANA storage
 # ===========================================================================
-printf '\n--- HANA storage, replication, and HA/DR hooks ---\n'
+printf '\n--- HANA storage ---\n'
 
 for hana_mount in "/hana/data/${SID}" "/hana/log/${SID}" "/hana/shared/${SID}"; do
     if findmnt -T "$hana_mount" >/dev/null 2>&1; then
@@ -526,82 +521,9 @@ for hana_mount in "/hana/data/${SID}" "/hana/log/${SID}" "/hana/shared/${SID}"; 
     fi
 done
 
-if su - "${SID_LOWER}adm" -c "hdbnsutil -sr_state" >/tmp/sr_state.$$ 2>&1; then
-    pass "HANA System Replication state is queryable"
-    sed 's/^/INFO  SR: /' /tmp/sr_state.$$ | head -n 40
-
-    if grep -qiE 'primary|secondary' /tmp/sr_state.$$; then
-        pass "HANA System Replication roles are present"
-    else
-        fail "HANA System Replication output does not show a primary or secondary role"
-    fi
-else
-    fail "Unable to query HANA System Replication with hdbnsutil -sr_state"
-fi
-
-rm -f /tmp/sr_state.$$
-
-if [[ -r "$GLOBAL_INI" ]]; then
-    pass "HANA global.ini found: ${GLOBAL_INI}"
-
-    if grep -qE '^[[:space:]]*provider[[:space:]]*=[[:space:]]*susHanaSR[[:space:]]*$' "$GLOBAL_INI"; then
-        pass "susHanaSR HA/DR provider is configured"
-    else
-        fail "susHanaSR HA/DR provider is not configured"
-    fi
-
-    if grep -qE '^[[:space:]]*provider[[:space:]]*=[[:space:]]*susChkSrv[[:space:]]*$' "$GLOBAL_INI"; then
-        pass "susChkSrv HA/DR provider is configured"
-
-        if grep -qE '^[[:space:]]*action_on_lost[[:space:]]*=[[:space:]]*fence[[:space:]]*$' "$GLOBAL_INI"; then
-            pass "susChkSrv action_on_lost=fence is configured"
-        else
-            warn "susChkSrv is configured but action_on_lost=fence was not found"
-        fi
-    else
-        warn "susChkSrv HA/DR provider is not configured"
-    fi
-else
-    fail "Cannot read HANA global.ini: ${GLOBAL_INI}"
-fi
-
-SUDOERS_FILE="/etc/sudoers.d/20-saphana"
-
-if [[ -r "$SUDOERS_FILE" ]]; then
-    if visudo -cf "$SUDOERS_FILE" >/dev/null 2>&1; then
-        pass "SAPHanaSR-angi sudoers file has valid syntax"
-    else
-        fail "Invalid sudoers syntax: ${SUDOERS_FILE}"
-    fi
-
-    if grep -q "${SID_LOWER}adm" "$SUDOERS_FILE"; then
-        pass "sudoers file contains permissions for ${SID_LOWER}adm"
-    else
-        fail "sudoers file does not contain permissions for ${SID_LOWER}adm"
-    fi
-
-    for site in "${SITE_ARRAY[@]}"; do
-        if grep -q "hana_${SID_LOWER}_site_srHook_${site}" "$SUDOERS_FILE"; then
-            pass "sudoers permissions found for HANA site hook: ${site}"
-        else
-            fail "Missing sudoers permissions for HANA site hook: ${site}"
-        fi
-    done
-
-    if grep -q "SAPHanaSR-hookHelper.*--sid=${SID}" "$SUDOERS_FILE"; then
-        pass "sudoers contains SAPHanaSR-hookHelper permissions for SID ${SID}"
-    else
-        fail "sudoers is missing SAPHanaSR-hookHelper permissions for SID ${SID}"
-    fi
-else
-    fail "Required SAPHanaSR-angi sudoers file is missing: ${SUDOERS_FILE}"
-fi
-
 # ===========================================================================
-# Active/passive SAPHanaSR-angi resource configuration
+# Detect whether SAPHanaSR-angi resources already exist
 # ===========================================================================
-printf '\n--- Validate implemented HANA cluster resources (active/passive) ---\n'
-
 RSC_TOPOLOGY="rsc_SAPHanaTopology_${SID}_HDB${INSTANCE}"
 CLN_TOPOLOGY="cln_SAPHanaTopology_${SID}_HDB${INSTANCE}"
 
@@ -626,256 +548,300 @@ else
     : >/tmp/crm_config.$$
 fi
 
-TOPOLOGY_CFG="$(crm_object_block "$RSC_TOPOLOGY")"
-TOPOLOGY_CLONE_CFG="$(crm_object_block "$CLN_TOPOLOGY")"
-
-CONTROLLER_CFG="$(crm_object_block "$RSC_CONTROLLER")"
-CONTROLLER_CLONE_CFG="$(crm_object_block "$MSL_CONTROLLER")"
-
-IP_CFG="$(crm_object_block "$RSC_IP")"
-AZURE_LB_CFG="$(crm_object_block "$RSC_AZURE_LB")"
-IP_GROUP_CFG="$(crm_object_block "$GRP_IP")"
-
-IP_COLOCATION_CFG="$(crm_object_block "$COL_IP")"
-HANA_ORDER_CFG="$(crm_object_block "$ORD_HANA")"
-
-if grep -qE "^primitive[[:space:]]+${RSC_TOPOLOGY}[[:space:]]+(ocf:suse:)?SAPHanaTopology([[:space:]]|$)" <<< "$TOPOLOGY_CFG"; then
-    pass "SAPHanaTopology primitive is configured: ${RSC_TOPOLOGY}"
-else
-    fail "Missing or invalid SAPHanaTopology primitive: ${RSC_TOPOLOGY}"
-fi
-
-if grep -qE '(^|[[:space:]])SID="?'"${SID}"'?([[:space:]]|$)' <<< "$TOPOLOGY_CFG" &&
-   grep -qE '(^|[[:space:]])InstanceNumber="?'"${INSTANCE}"'?([[:space:]]|$)' <<< "$TOPOLOGY_CFG"; then
-    pass "SAPHanaTopology SID and instance parameters are correct"
-else
-    fail "SAPHanaTopology SID=${SID} and/or InstanceNumber=${INSTANCE} parameters were not found"
-fi
-
-if grep -qE "^clone[[:space:]]+${CLN_TOPOLOGY}[[:space:]]+${RSC_TOPOLOGY}([[:space:]]|$)" <<< "$TOPOLOGY_CLONE_CFG"; then
-    pass "SAPHanaTopology clone is configured: ${CLN_TOPOLOGY}"
-else
-    fail "Missing or invalid SAPHanaTopology clone: ${CLN_TOPOLOGY}"
-fi
-
-if grep -qE '(^|[[:space:]])clone-node-max="?1"?([[:space:]]|$)' <<< "$TOPOLOGY_CLONE_CFG"; then
-    pass "SAPHanaTopology clone-node-max is set to 1"
-else
-    warn "Could not confirm clone-node-max=1 for ${CLN_TOPOLOGY}"
-fi
-
-if grep -qE '(^|[[:space:]])interleave="?true"?([[:space:]]|$)' <<< "$TOPOLOGY_CLONE_CFG"; then
-    pass "SAPHanaTopology clone interleave is enabled"
-else
-    warn "Could not confirm interleave=true for ${CLN_TOPOLOGY}"
-fi
-
-if grep -qE "^primitive[[:space:]]+${RSC_CONTROLLER}[[:space:]]+(ocf:suse:)?SAPHanaController([[:space:]]|$)" <<< "$CONTROLLER_CFG"; then
-    pass "SAPHanaController primitive is configured: ${RSC_CONTROLLER}"
-else
-    fail "Missing or invalid SAPHanaController primitive: ${RSC_CONTROLLER}"
-fi
-
-if grep -qE "^clone[[:space:]]+${MSL_CONTROLLER}[[:space:]]+${RSC_CONTROLLER}([[:space:]]|$)" <<< "$CONTROLLER_CLONE_CFG"; then
-    pass "SAPHanaController clone is configured: ${MSL_CONTROLLER}"
-else
-    fail "Missing or invalid SAPHanaController clone: ${MSL_CONTROLLER}"
-fi
-
-if grep -qE '(^|[[:space:]])promotable="?true"?([[:space:]]|$)' <<< "$CONTROLLER_CLONE_CFG"; then
-    pass "SAPHanaController clone is configured as promotable"
-else
-    fail "SAPHanaController clone is not configured as promotable"
-fi
-
-if grep -qE '(^|[[:space:]])clone-node-max="?1"?([[:space:]]|$)' <<< "$CONTROLLER_CLONE_CFG"; then
-    pass "SAPHanaController clone-node-max is set to 1"
-else
-    warn "Could not confirm clone-node-max=1 for ${MSL_CONTROLLER}"
-fi
-
-if grep -qE '(^|[[:space:]])interleave="?true"?([[:space:]]|$)' <<< "$CONTROLLER_CLONE_CFG"; then
-    pass "SAPHanaController clone interleave is enabled"
-else
-    warn "Could not confirm interleave=true for ${MSL_CONTROLLER}"
-fi
-
-if grep -qE '(^|[[:space:]])PREFER_SITE_TAKEOVER="?(true|false)"?([[:space:]]|$)' <<< "$CONTROLLER_CFG"; then
-    pass "SAPHanaController PREFER_SITE_TAKEOVER parameter is configured"
-else
-    warn "SAPHanaController PREFER_SITE_TAKEOVER parameter was not found"
-fi
-
-if grep -qE '(^|[[:space:]])DUPLICATE_PRIMARY_TIMEOUT="?[0-9]+"?([[:space:]]|$)' <<< "$CONTROLLER_CFG"; then
-    pass "SAPHanaController DUPLICATE_PRIMARY_TIMEOUT parameter is configured"
-else
-    warn "SAPHanaController DUPLICATE_PRIMARY_TIMEOUT parameter was not found"
-fi
-
-if grep -qE '(^|[[:space:]])AUTOMATED_REGISTER="?(true|false)"?([[:space:]]|$)' <<< "$CONTROLLER_CFG"; then
-    pass "SAPHanaController AUTOMATED_REGISTER parameter is configured"
-
-    if grep -qE '(^|[[:space:]])AUTOMATED_REGISTER="?false"?([[:space:]]|$)' <<< "$CONTROLLER_CFG"; then
-        warn "AUTOMATED_REGISTER=false is configured. Set it to true after failover testing is complete."
-    fi
-else
-    warn "SAPHanaController AUTOMATED_REGISTER parameter was not found"
-fi
-
-if grep -qE "^primitive[[:space:]]+${RSC_IP}[[:space:]]+(ocf:heartbeat:)?IPaddr2([[:space:]]|$)" <<< "$IP_CFG"; then
-    pass "Primary virtual IP resource is configured: ${RSC_IP}"
-else
-    fail "Missing or invalid primary virtual IP resource: ${RSC_IP}"
-fi
-
-if grep -qE "^primitive[[:space:]]+${RSC_AZURE_LB}[[:space:]]+azure-lb([[:space:]]|$)" <<< "$AZURE_LB_CFG"; then
-    pass "Azure Load Balancer probe resource is configured: ${RSC_AZURE_LB}"
-else
-    fail "Missing or invalid Azure Load Balancer probe resource: ${RSC_AZURE_LB}"
-fi
-
-EXPECTED_PROBE_PORT="625${INSTANCE}"
-
-if grep -qE '(^|[[:space:]])port='"${EXPECTED_PROBE_PORT}"'([[:space:]]|$)' <<< "$AZURE_LB_CFG"; then
-    pass "Azure Load Balancer probe uses expected port: ${EXPECTED_PROBE_PORT}"
-else
-    fail "Azure Load Balancer probe port ${EXPECTED_PROBE_PORT} was not found for ${RSC_AZURE_LB}"
-fi
-
-if grep -qE "^group[[:space:]]+${GRP_IP}([[:space:]]|$)" <<< "$IP_GROUP_CFG" &&
-   grep -qF "$RSC_IP" <<< "$IP_GROUP_CFG" &&
-   grep -qF "$RSC_AZURE_LB" <<< "$IP_GROUP_CFG"; then
-    pass "Primary virtual IP and Azure Load Balancer probe are grouped: ${GRP_IP}"
-else
-    fail "Missing or invalid primary IP group: ${GRP_IP}"
-fi
-
-if grep -qF "${GRP_IP}:Started" <<< "$IP_COLOCATION_CFG" &&
-   grep -qE "${MSL_CONTROLLER}:(Promoted|Master)" <<< "$IP_COLOCATION_CFG"; then
-    pass "Primary IP group is colocated with the primary HANA controller"
-else
-    fail "Missing expected colocation between ${GRP_IP} and ${MSL_CONTROLLER}"
-fi
-
-if [[ -n "$HANA_ORDER_CFG" ]] &&
-   grep -qF "$CLN_TOPOLOGY" <<< "$HANA_ORDER_CFG" &&
-   grep -qF "$MSL_CONTROLLER" <<< "$HANA_ORDER_CFG"; then
-    pass "Topology-to-controller ordering constraint is configured"
-else
-    warn "Topology-to-controller ordering constraint ${ORD_HANA} was not found"
-fi
-
-if grep -qE "${RSC_SECONDARY_IP}|${RSC_SECONDARY_AZURE_LB}|${GRP_SECONDARY_IP}" /tmp/crm_config.$$; then
-    fail "Secondary read-enabled IP resources were found. This is not an active/passive-only configuration."
-else
-    pass "No secondary read-enabled IP resources were found"
+if grep -qE "(${RSC_TOPOLOGY}|${RSC_CONTROLLER}|${CLN_TOPOLOGY}|${MSL_CONTROLLER})" \
+    /tmp/crm_config.$$; then
+    HSR_CONFIGURED=true
 fi
 
 # ===========================================================================
-# Active/passive runtime validation
+# HANA SR hooks and resource checks, only when HSR is configured
 # ===========================================================================
-printf '\n--- Validate active/passive runtime state ---\n'
-
-# -1 is mandatory to prevent crm_mon from running continuously.
-if crm_mon -1 -r >/tmp/crm_mon_resources.$$ 2>&1; then
-    pass "Pacemaker runtime resource status is queryable"
+if [[ "$HSR_CONFIGURED" != true ]]; then
+    printf '\n--- HANA SR configuration ---\n'
+    info "HANA System Replication hooks and HANA cluster resources are not configured yet"
+    info "Basic Pacemaker validation completed; HANA SR-specific checks are skipped"
 else
-    fail "Unable to read runtime resource status with 'crm_mon -1 -r'"
-    : >/tmp/crm_mon_resources.$$
-fi
+    printf '\n--- HANA System Replication, hooks, and active/passive resources ---\n'
 
-if grep -q "Failed Resource Actions:" /tmp/crm_mon_resources.$$ ||
-   grep -q "Failed Actions:" /tmp/crm_mon_resources.$$; then
-    fail "Pacemaker reports failed resource actions"
-else
-    pass "Pacemaker reports no failed resource actions"
-fi
-
-# Supports both modern Promoted/Unpromoted and legacy Masters/Slaves output.
-PRIMARY_NODES="$(
-    get_crm_role_nodes "Promoted" "Masters" /tmp/crm_mon_resources.$$
-)"
-
-SECONDARY_NODES="$(
-    get_crm_role_nodes "Unpromoted" "Slaves" /tmp/crm_mon_resources.$$
-)"
-
-PRIMARY_COUNT="$(wc -w <<< "$PRIMARY_NODES")"
-SECONDARY_COUNT="$(wc -w <<< "$SECONDARY_NODES")"
-
-if [[ "$PRIMARY_COUNT" -eq 1 ]]; then
-    pass "Exactly one SAPHanaController instance has the primary role: ${PRIMARY_NODES}"
-else
-    fail "Expected exactly one primary SAPHanaController instance; found: '${PRIMARY_NODES:-none}'"
-fi
-
-if [[ "$SECONDARY_COUNT" -eq 1 ]]; then
-    pass "Exactly one SAPHanaController instance has the secondary role: ${SECONDARY_NODES}"
-else
-    fail "Expected exactly one secondary SAPHanaController instance; found: '${SECONDARY_NODES:-none}'"
-fi
-
-# Resource lines may have a leading Pacemaker "*" marker. Search for the
-# resource name anywhere in a line that also reports Started.
-VIP_NODE="$(
-    awk -v resource="$RSC_IP" '
-        index($0, resource) && $0 ~ /Started/ {
-            print $NF
-            exit
-        }
-    ' /tmp/crm_mon_resources.$$
-)"
-
-AZURE_LB_NODE="$(
-    awk -v resource="$RSC_AZURE_LB" '
-        index($0, resource) && $0 ~ /Started/ {
-            print $NF
-            exit
-        }
-    ' /tmp/crm_mon_resources.$$
-)"
-
-if [[ -n "$VIP_NODE" ]]; then
-    pass "Primary virtual IP resource is running on: ${VIP_NODE}"
-else
-    fail "Primary virtual IP resource ${RSC_IP} is not reported as Started"
-fi
-
-if [[ -n "$AZURE_LB_NODE" ]]; then
-    pass "Azure Load Balancer probe resource is running on: ${AZURE_LB_NODE}"
-else
-    fail "Azure Load Balancer probe resource ${RSC_AZURE_LB} is not reported as Started"
-fi
-
-if [[ -n "$PRIMARY_NODES" && "$VIP_NODE" == "$PRIMARY_NODES" ]]; then
-    pass "Primary virtual IP is aligned with the primary HANA controller"
-else
-    fail "Primary virtual IP node '${VIP_NODE:-none}' does not match the primary HANA controller node '${PRIMARY_NODES:-none}'"
-fi
-
-if [[ -n "$PRIMARY_NODES" && "$AZURE_LB_NODE" == "$PRIMARY_NODES" ]]; then
-    pass "Azure Load Balancer probe is aligned with the primary HANA controller"
-else
-    fail "Azure Load Balancer probe node '${AZURE_LB_NODE:-none}' does not match the primary HANA controller node '${PRIMARY_NODES:-none}'"
-fi
-
-if command_exists SAPHanaSR-showAttr; then
-    if SAPHanaSR-showAttr >/tmp/saphanasr_showattr.$$ 2>&1; then
-        pass "SAPHanaSR-showAttr completed successfully"
-        sed 's/^/INFO  SAPHanaSR: /' /tmp/saphanasr_showattr.$$ | head -n 80
+    if [[ ${#SITE_ARRAY[@]} -ne 2 ]]; then
+        fail "HANA SR resources are configured but exactly two HSR sites could not be detected"
+        info "Specify them with: --sites SITE1,SITE2"
     else
-        warn "SAPHanaSR-showAttr could not retrieve HANA SR cluster attributes"
+        pass "HANA SR sites available for validation: ${SITES}"
     fi
 
-    rm -f /tmp/saphanasr_showattr.$$
-else
-    warn "SAPHanaSR-showAttr command was not found in PATH"
+    if su - "${SID_LOWER}adm" -c "hdbnsutil -sr_state" >/tmp/sr_state.$$ 2>&1; then
+        pass "HANA System Replication state is queryable"
+        sed 's/^/INFO  SR: /' /tmp/sr_state.$$ | head -n 40
+
+        if grep -qiE 'primary|secondary' /tmp/sr_state.$$; then
+            pass "HANA System Replication roles are present"
+        else
+            fail "HANA System Replication output does not show a primary or secondary role"
+        fi
+    else
+        fail "Unable to query HANA System Replication with hdbnsutil -sr_state"
+    fi
+
+    rm -f /tmp/sr_state.$$
+
+    if [[ -r "$GLOBAL_INI" ]]; then
+        pass "HANA global.ini found: ${GLOBAL_INI}"
+
+        if grep -qE '^[[:space:]]*provider[[:space:]]*=[[:space:]]*susHanaSR[[:space:]]*$' "$GLOBAL_INI"; then
+            pass "susHanaSR HA/DR provider is configured"
+        else
+            fail "susHanaSR HA/DR provider is not configured"
+        fi
+
+        if grep -qE '^[[:space:]]*provider[[:space:]]*=[[:space:]]*susChkSrv[[:space:]]*$' "$GLOBAL_INI"; then
+            pass "susChkSrv HA/DR provider is configured"
+        else
+            warn "susChkSrv HA/DR provider is not configured"
+        fi
+    else
+        fail "Cannot read HANA global.ini: ${GLOBAL_INI}"
+    fi
+
+    SUDOERS_FILE="/etc/sudoers.d/20-saphana"
+
+    if [[ -r "$SUDOERS_FILE" ]]; then
+        if visudo -cf "$SUDOERS_FILE" >/dev/null 2>&1; then
+            pass "SAPHanaSR-angi sudoers file has valid syntax"
+        else
+            fail "Invalid sudoers syntax: ${SUDOERS_FILE}"
+        fi
+
+        if grep -q "${SID_LOWER}adm" "$SUDOERS_FILE"; then
+            pass "sudoers file contains permissions for ${SID_LOWER}adm"
+        else
+            fail "sudoers file does not contain permissions for ${SID_LOWER}adm"
+        fi
+
+        for site in "${SITE_ARRAY[@]}"; do
+            if grep -q "hana_${SID_LOWER}_site_srHook_${site}" "$SUDOERS_FILE"; then
+                pass "sudoers permissions found for HANA site hook: ${site}"
+            else
+                fail "Missing sudoers permissions for HANA site hook: ${site}"
+            fi
+        done
+    else
+        fail "Required SAPHanaSR-angi sudoers file is missing: ${SUDOERS_FILE}"
+    fi
+
+    TOPOLOGY_CFG="$(crm_object_block "$RSC_TOPOLOGY")"
+    TOPOLOGY_CLONE_CFG="$(crm_object_block "$CLN_TOPOLOGY")"
+    CONTROLLER_CFG="$(crm_object_block "$RSC_CONTROLLER")"
+    CONTROLLER_CLONE_CFG="$(crm_object_block "$MSL_CONTROLLER")"
+    IP_CFG="$(crm_object_block "$RSC_IP")"
+    AZURE_LB_CFG="$(crm_object_block "$RSC_AZURE_LB")"
+    IP_GROUP_CFG="$(crm_object_block "$GRP_IP")"
+    IP_COLOCATION_CFG="$(crm_object_block "$COL_IP")"
+    HANA_ORDER_CFG="$(crm_object_block "$ORD_HANA")"
+
+    if grep -qE "^primitive[[:space:]]+${RSC_TOPOLOGY}[[:space:]]+(ocf:suse:)?SAPHanaTopology([[:space:]]|$)" <<< "$TOPOLOGY_CFG"; then
+        pass "SAPHanaTopology primitive is configured: ${RSC_TOPOLOGY}"
+    else
+        fail "Missing or invalid SAPHanaTopology primitive: ${RSC_TOPOLOGY}"
+    fi
+
+    if grep -qE "^clone[[:space:]]+${CLN_TOPOLOGY}[[:space:]]+${RSC_TOPOLOGY}([[:space:]]|$)" <<< "$TOPOLOGY_CLONE_CFG"; then
+        pass "SAPHanaTopology clone is configured: ${CLN_TOPOLOGY}"
+    else
+        fail "Missing or invalid SAPHanaTopology clone: ${CLN_TOPOLOGY}"
+    fi
+
+    if grep -qE '(^|[[:space:]])clone-node-max="?1"?([[:space:]]|$)' <<< "$TOPOLOGY_CLONE_CFG"; then
+        pass "SAPHanaTopology clone-node-max is set to 1"
+    else
+        warn "Could not confirm clone-node-max=1 for ${CLN_TOPOLOGY}"
+    fi
+
+    if grep -qE '(^|[[:space:]])interleave="?true"?([[:space:]]|$)' <<< "$TOPOLOGY_CLONE_CFG"; then
+        pass "SAPHanaTopology clone interleave is enabled"
+    else
+        warn "Could not confirm interleave=true for ${CLN_TOPOLOGY}"
+    fi
+
+    if grep -qE "^primitive[[:space:]]+${RSC_CONTROLLER}[[:space:]]+(ocf:suse:)?SAPHanaController([[:space:]]|$)" <<< "$CONTROLLER_CFG"; then
+        pass "SAPHanaController primitive is configured: ${RSC_CONTROLLER}"
+    else
+        fail "Missing or invalid SAPHanaController primitive: ${RSC_CONTROLLER}"
+    fi
+
+    if grep -qE "^clone[[:space:]]+${MSL_CONTROLLER}[[:space:]]+${RSC_CONTROLLER}([[:space:]]|$)" <<< "$CONTROLLER_CLONE_CFG"; then
+        pass "SAPHanaController clone is configured: ${MSL_CONTROLLER}"
+    else
+        fail "Missing or invalid SAPHanaController clone: ${MSL_CONTROLLER}"
+    fi
+
+    if grep -qE '(^|[[:space:]])promotable="?true"?([[:space:]]|$)' <<< "$CONTROLLER_CLONE_CFG"; then
+        pass "SAPHanaController clone is configured as promotable"
+    else
+        fail "SAPHanaController clone is not configured as promotable"
+    fi
+
+    if grep -qE '(^|[[:space:]])clone-node-max="?1"?([[:space:]]|$)' <<< "$CONTROLLER_CLONE_CFG"; then
+        pass "SAPHanaController clone-node-max is set to 1"
+    else
+        warn "Could not confirm clone-node-max=1 for ${MSL_CONTROLLER}"
+    fi
+
+    if grep -qE '(^|[[:space:]])interleave="?true"?([[:space:]]|$)' <<< "$CONTROLLER_CLONE_CFG"; then
+        pass "SAPHanaController clone interleave is enabled"
+    else
+        warn "Could not confirm interleave=true for ${MSL_CONTROLLER}"
+    fi
+
+    if grep -qE "^primitive[[:space:]]+${RSC_IP}[[:space:]]+(ocf:heartbeat:)?IPaddr2([[:space:]]|$)" <<< "$IP_CFG"; then
+        pass "Primary virtual IP resource is configured: ${RSC_IP}"
+    else
+        fail "Missing or invalid primary virtual IP resource: ${RSC_IP}"
+    fi
+
+    if grep -qE "^primitive[[:space:]]+${RSC_AZURE_LB}[[:space:]]+azure-lb([[:space:]]|$)" <<< "$AZURE_LB_CFG"; then
+        pass "Azure Load Balancer probe resource is configured: ${RSC_AZURE_LB}"
+    else
+        fail "Missing or invalid Azure Load Balancer probe resource: ${RSC_AZURE_LB}"
+    fi
+
+    EXPECTED_PROBE_PORT="625${INSTANCE}"
+
+    if grep -qE '(^|[[:space:]])port='"${EXPECTED_PROBE_PORT}"'([[:space:]]|$)' <<< "$AZURE_LB_CFG"; then
+        pass "Azure Load Balancer probe uses expected port: ${EXPECTED_PROBE_PORT}"
+    else
+        fail "Azure Load Balancer probe port ${EXPECTED_PROBE_PORT} was not found for ${RSC_AZURE_LB}"
+    fi
+
+    if grep -qE "^group[[:space:]]+${GRP_IP}([[:space:]]|$)" <<< "$IP_GROUP_CFG" &&
+       grep -qF "$RSC_IP" <<< "$IP_GROUP_CFG" &&
+       grep -qF "$RSC_AZURE_LB" <<< "$IP_GROUP_CFG"; then
+        pass "Primary virtual IP and Azure Load Balancer probe are grouped: ${GRP_IP}"
+    else
+        fail "Missing or invalid primary IP group: ${GRP_IP}"
+    fi
+
+    if grep -qF "${GRP_IP}:Started" <<< "$IP_COLOCATION_CFG" &&
+       grep -qE "${MSL_CONTROLLER}:(Promoted|Master)" <<< "$IP_COLOCATION_CFG"; then
+        pass "Primary IP group is colocated with the primary HANA controller"
+    else
+        fail "Missing expected colocation between ${GRP_IP} and ${MSL_CONTROLLER}"
+    fi
+
+    if [[ -n "$HANA_ORDER_CFG" ]] &&
+       grep -qF "$CLN_TOPOLOGY" <<< "$HANA_ORDER_CFG" &&
+       grep -qF "$MSL_CONTROLLER" <<< "$HANA_ORDER_CFG"; then
+        pass "Topology-to-controller ordering constraint is configured"
+    else
+        warn "Topology-to-controller ordering constraint ${ORD_HANA} was not found"
+    fi
+
+    if grep -qE "${RSC_SECONDARY_IP}|${RSC_SECONDARY_AZURE_LB}|${GRP_SECONDARY_IP}" /tmp/crm_config.$$; then
+        fail "Secondary read-enabled IP resources were found. This is not an active/passive-only configuration."
+    else
+        pass "No secondary read-enabled IP resources were found"
+    fi
+
+    printf '\n--- Validate active/passive runtime state ---\n'
+
+    if crm_mon -1 -r >/tmp/crm_mon_resources.$$ 2>&1; then
+        pass "Pacemaker runtime resource status is queryable"
+    else
+        fail "Unable to read runtime resource status with 'crm_mon -1 -r'"
+        : >/tmp/crm_mon_resources.$$
+    fi
+
+    if grep -q "Failed Resource Actions:" /tmp/crm_mon_resources.$$ ||
+       grep -q "Failed Actions:" /tmp/crm_mon_resources.$$; then
+        fail "Pacemaker reports failed resource actions"
+    else
+        pass "Pacemaker reports no failed resource actions"
+    fi
+
+    PRIMARY_NODES="$(
+        get_crm_role_nodes "Promoted" "Masters" /tmp/crm_mon_resources.$$
+    )"
+
+    SECONDARY_NODES="$(
+        get_crm_role_nodes "Unpromoted" "Slaves" /tmp/crm_mon_resources.$$
+    )"
+
+    PRIMARY_COUNT="$(wc -w <<< "$PRIMARY_NODES")"
+    SECONDARY_COUNT="$(wc -w <<< "$SECONDARY_NODES")"
+
+    if [[ "$PRIMARY_COUNT" -eq 1 ]]; then
+        pass "Exactly one SAPHanaController instance has the primary role: ${PRIMARY_NODES}"
+    else
+        fail "Expected exactly one primary SAPHanaController instance; found: '${PRIMARY_NODES:-none}'"
+    fi
+
+    if [[ "$SECONDARY_COUNT" -eq 1 ]]; then
+        pass "Exactly one SAPHanaController instance has the secondary role: ${SECONDARY_NODES}"
+    else
+        fail "Expected exactly one secondary SAPHanaController instance; found: '${SECONDARY_NODES:-none}'"
+    fi
+
+    VIP_NODE="$(
+        awk -v resource="$RSC_IP" '
+            index($0, resource) && $0 ~ /Started/ {
+                print $NF
+                exit
+            }
+        ' /tmp/crm_mon_resources.$$
+    )"
+
+    AZURE_LB_NODE="$(
+        awk -v resource="$RSC_AZURE_LB" '
+            index($0, resource) && $0 ~ /Started/ {
+                print $NF
+                exit
+            }
+        ' /tmp/crm_mon_resources.$$
+    )"
+
+    if [[ -n "$VIP_NODE" ]]; then
+        pass "Primary virtual IP resource is running on: ${VIP_NODE}"
+    else
+        fail "Primary virtual IP resource ${RSC_IP} is not reported as Started"
+    fi
+
+    if [[ -n "$AZURE_LB_NODE" ]]; then
+        pass "Azure Load Balancer probe resource is running on: ${AZURE_LB_NODE}"
+    else
+        fail "Azure Load Balancer probe resource ${RSC_AZURE_LB} is not reported as Started"
+    fi
+
+    if [[ -n "$PRIMARY_NODES" && "$VIP_NODE" == "$PRIMARY_NODES" ]]; then
+        pass "Primary virtual IP is aligned with the primary HANA controller"
+    else
+        fail "Primary virtual IP node '${VIP_NODE:-none}' does not match the primary HANA controller node '${PRIMARY_NODES:-none}'"
+    fi
+
+    if [[ -n "$PRIMARY_NODES" && "$AZURE_LB_NODE" == "$PRIMARY_NODES" ]]; then
+        pass "Azure Load Balancer probe is aligned with the primary HANA controller"
+    else
+        fail "Azure Load Balancer probe node '${AZURE_LB_NODE:-none}' does not match the primary HANA controller node '${PRIMARY_NODES:-none}'"
+    fi
+
+    if command_exists SAPHanaSR-showAttr; then
+        if SAPHanaSR-showAttr >/tmp/saphanasr_showattr.$$ 2>&1; then
+            pass "SAPHanaSR-showAttr completed successfully"
+            sed 's/^/INFO  SAPHanaSR: /' /tmp/saphanasr_showattr.$$ | head -n 80
+        else
+            warn "SAPHanaSR-showAttr could not retrieve HANA SR cluster attributes"
+        fi
+
+        rm -f /tmp/saphanasr_showattr.$$
+    else
+        warn "SAPHanaSR-showAttr command was not found in PATH"
+    fi
+
+    rm -f /tmp/crm_mon_resources.$$
 fi
 
 rm -f \
     /tmp/cib.$$ \
-    /tmp/crm_config.$$ \
-    /tmp/crm_mon_resources.$$
+    /tmp/crm_config.$$
 
 printf '\n============================================================\n'
 printf 'Preflight summary for %s\n' "$HOST"
