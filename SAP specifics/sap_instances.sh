@@ -318,7 +318,7 @@ EOF
 # DATABASE FUNCTIONS
 function_db_list(){
     if [ "$db_systems_found" -eq 0 ]; then
-        echo "$(date): No database instances found."
+        # echo "$(date): No database instances found."
         return 1
     else
         for db_sid in "${db_systems_array[@]}"; do
@@ -1541,8 +1541,18 @@ function_oracle_listener() {
     return $RC
 }
 function_load_config() {
-    function_find_sap_instances
-    function_find_db_systems
+    local find_sap_systems_error=0
+    local find_db_systems_error=0
+    if ! function_find_sap_instances; then
+        find_sap_systems_error=1
+    fi
+    if ! function_find_db_systems; then
+        find_db_systems_error=1
+    fi
+    if [[ $find_sap_systems_error -eq 1 && $find_db_systems_error -eq 1 ]]; then
+        echo "$(date): ! Error: No SAP or database systems found."
+        exit 1
+    fi
 }
 
 ## Main script logic
@@ -1573,123 +1583,123 @@ else
 fi
 case $command in
     instance_list)
-        function_load_config
         echo "$message"
+        function_load_config
         function_instance_list $arg2
         ;;
     instance_status)
-        function_load_config
         echo "$message"
+        function_load_config
         function_instance_status $arg2
         ;;
     instance_status_det)
-        function_load_config
         echo "$message"
+        function_load_config
         function_instance_status_det $arg2
         ;;
     instance_version)
-        function_load_config
         echo "$message"
+        function_load_config
         function_instance_version $arg2
         ;;
     system_stop)
+        echo "$message"
         function_load_config
         if [[ -z "$arg2" ]]; then
             echo "$(date): ! Error: 'option' is required for 'system_stop' command."
             function_display_help
             exit 1
         fi
-        echo "$message"
         function_system_stop $arg2
         ;;
     system_start)
+        echo "$message"
         function_load_config
         if [[ -z "$arg2" ]]; then
             echo "$(date): ! Error: 'option' is required for 'system_start' command."
             function_display_help
             exit 1
         fi
-        echo "$message"
         function_system_start $arg2
         ;;
     system_restart)
+        echo "$message"
         function_load_config
         if [[ -z "$arg2" ]]; then   
             echo "$(date): ! Error: 'option' is required for 'system_restart' command."
             function_display_help
             exit 1
         fi
-        echo "$message"
         function_system_restart $arg2
         ;;
     system_status)
-        function_load_config
         echo "$message"
+        function_load_config
         function_system_status $arg2
         ;;
     db_list)
-        function_load_config
         echo "$message"
+        function_load_config
         function_db_list
         ;;
     db_status)
-        function_load_config
         echo "$message"
+        function_load_config
         function_db_status $arg2
         ;;
     db_stop)
+        echo "$message"
         function_load_config
         if [[ -z "$arg2" ]]; then
             echo "$(date): ! Error: 'option' is required for 'db_stop' command."
             function_display_help
             exit 1
         fi
-        echo "$message"
         function_db_stop $arg2
         ;;
     db_start)
+        echo "$message"
         function_load_config
         if [[ -z "$arg2" ]]; then
             echo "$(date): ! Error: 'option' is required for 'db_start' command."
             function_display_help
             exit 1
         fi
-        echo "$message"
         function_db_start $arg2
         ;;
     db_restart)
+        echo "$message"
         function_load_config
         if [[ -z "$arg2" ]]; then
             echo "$(date): ! Error: 'option' is required for 'db_restart' command."
             function_display_help
             exit 1
         fi
-        echo "$message"
         function_db_restart $arg2
         ;;
     db_type)
-        function_load_config
         echo "$message"
+        function_load_config
         function_db_type $arg2
         ;;
     all_stop)
-        function_load_config
         echo "$message"
+        function_load_config
         function_all_stop $arg2
         ;;
     all_start)
-        function_load_config
         echo "$message"
+        function_load_config
         function_all_start $arg2
         ;;
     all_restart)
-        function_load_config
         echo "$message"
+        function_load_config
         function_all_restart $arg2
         ;;
     all_status)
-        function_load_config
         echo "$message"
+        function_load_config
         function_all_status $arg2
         ;;
     version|-v|--version|-version)
