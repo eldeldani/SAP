@@ -16,11 +16,15 @@ export TERM=xterm-256color
 
 # Script version
 declare SCRIPT_NAME="$(basename "$0")"
-declare SCRIPT_VERSION="2.0.10"
-declare SCRIPT_DATE="2026-08-03"
+declare SCRIPT_VERSION="2.0.11"
+declare SCRIPT_DATE="2026-10-28"
+# History of changes:
+# 2.0.11 - 2026-10-28 - Hosts with only ASCS or SCS instances were not being stopped or started correctly. find_sap_instances function was adding a JAVA/ABAP system to sap_java/abap_systems_array when it was only an ASCS or SCS instance. 
+
+
 
 # Test mode: Set to 1 for test mode (no actual start/stop commands executed), 0 for normal operation
-declare testexec=0
+declare testexec=1
 
 # Global arrays
 # - systems
@@ -129,6 +133,9 @@ function_find_sap_instances(){
                 fi
                 if [[ "${INSTANCE_TYPE}" == "ASCS" ]]; then
                     sap_ascs_instances_found=1
+                    if ! [[ " ${sap_abap_systems_array[@]} " =~ " ${SID} " ]]; then
+                        sap_abap_systems_array+=("$SID")
+                    fi
                     sap_ascs_instances_array+=("$SID")
                     sap_ascs_instances_array+=("$PROFSTRT")
                     sap_ascs_instances_array+=("$INSTANCE_TYPE")
@@ -138,6 +145,9 @@ function_find_sap_instances(){
                 fi
                 if [[ "${INSTANCE_TYPE}" == "SCS" ]]; then
                     sap_scs_instances_found=1
+                    if ! [[ " ${sap_java_systems_array[@]} " =~ " ${SID} " ]]; then
+                        sap_java_systems_array+=("$SID")
+                    fi
                     sap_scs_instances_array+=("$SID")
                     sap_scs_instances_array+=("$PROFSTRT")
                     sap_scs_instances_array+=("$INSTANCE_TYPE")
@@ -164,21 +174,21 @@ function_find_sap_instances(){
     fi
     # Uncomment for debugging
     # echo "==== Specifics ===="
-    # echo "SAP ABAP systems found: ${sap_abap_systems_array[@]}"
-    # echo "SAP ABAP instances found: ${sap_abap_instances_array[@]}"
-    # echo "SAP ASCS instances found: ${sap_ascs_instances_array[@]}"
-    # echo "SAP JAVA systems found: ${sap_java_systems_array[@]}"
-    # echo "SAP JAVA instances found: ${sap_java_instances_array[@]}"
-    # echo "SAP SCS instances found: ${sap_scs_instances_array[@]}"
-    # echo "SAP HDB systems found: ${sap_hdb_systems_array[@]}"
-    # echo "SAP HDB instances found: ${sap_hdb_instances_array[@]}"
-    # echo "SAP Content Server systems found: ${sap_contentserver_systems_array[@]}"
-    # echo "SAP Content Server instances found: ${sap_contentserver_instances_array[@]}"
-    # echo "SAP DAA instances found: ${sap_daa_instances_array[@]}"
+    # echo "sap_abap_systems_array: ${sap_abap_systems_array[@]}"
+    # echo "sap_abap_instances_array: ${sap_abap_instances_array[@]}"
+    # echo "sap_ascs_instances_array: ${sap_ascs_instances_array[@]}"
+    # echo "sap_java_systems_array: ${sap_java_systems_array[@]}"
+    # echo "sap_java_instances_array: ${sap_java_instances_array[@]}"
+    # echo "sap_scs_instances_array: ${sap_scs_instances_array[@]}"
+    # echo "sap_hdb_systems_array: ${sap_hdb_systems_array[@]}"
+    # echo "sap_hdb_instances_array: ${sap_hdb_instances_array[@]}"
+    # echo "sap_contentserver_systems_array: ${sap_contentserver_systems_array[@]}"
+    # echo "sap_contentserver_instances_array: ${sap_contentserver_instances_array[@]}"
+    # echo "sap_daa_instances_array: ${sap_daa_instances_array[@]}"
     # echo "==== global ===="
-    # echo "SAP ALL systems found: ${sap_systems_array[@]}"
-    # echo "SAP instances found: ${sap_instances_array[@]}"
-    # echo "SAP ALL instances found: ${sap_instances_all_array[@]}"
+    # echo "sap_systems_array: ${sap_systems_array[@]}"
+    # echo "sap_instances_array: ${sap_instances_array[@]}"
+    # echo "sap_instances_all_array: ${sap_instances_all_array[@]}"
     # echo ""
     # echo ""
     # echo ""
@@ -841,8 +851,7 @@ function_system_stop(){
         local sap_abap_systems_length=${#sap_abap_systems_array[@]}
         local sap_java_systems_length=${#sap_java_systems_array[@]}
         local sap_hdb_systems_length=${#sap_hdb_systems_array[@]}
-        local sap_contentserver_systems_length=${#sap_contentserver_systems_array[@]}
-        
+        local sap_contentserver_systems_length=${#sap_contentserver_systems_array[@]} 
         local sap_instances_length=${#sap_instances_array[@]}
         local sap_scs_instances_length=${#sap_scs_instances_array[@]}
         local sap_ascs_instances_length=${#sap_ascs_instances_array[@]}
@@ -1037,8 +1046,8 @@ function_system_stop(){
                     fi
                 done
             done
-        else
-            
+
+        else 
             local sid_lower=${1,,}
             local sys_num=""
             for (( i=0; i<(${sap_java_instances_length}); i+=5 )); do 
