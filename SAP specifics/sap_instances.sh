@@ -16,15 +16,16 @@ export TERM=xterm-256color
 
 # Script version
 declare SCRIPT_NAME="$(basename "$0")"
-declare SCRIPT_VERSION="2.0.11"
+declare SCRIPT_VERSION="2.0.12"
 declare SCRIPT_DATE="2026-10-28"
 # History of changes:
 # 2.0.11 - 2026-10-28 - Hosts with only ASCS or SCS instances were not being stopped or started correctly. find_sap_instances function was adding a JAVA/ABAP system to sap_java/abap_systems_array when it was only an ASCS or SCS instance. 
+# 2.0.12 - 2026-10-28 - Added better message when no sap instances or databases are found. 
 
 
 
 # Test mode: Set to 1 for test mode (no actual start/stop commands executed), 0 for normal operation
-declare testexec=1
+declare testexec=0
 
 # Global arrays
 # - systems
@@ -74,6 +75,7 @@ function_script_version(){
 }
 function_find_sap_instances(){
     if ! [ -f /usr/sap/sapservices ]; then
+        echo "$(date): ! Error: /usr/sap/sapservices file not found. Can not detect SAP instances."
         return 1
     else
         while IFS= read -r line; do
