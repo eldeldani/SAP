@@ -987,7 +987,7 @@ function_system_stop(){
             # Then, stop Content Servers      
             for (( i=0; i<(${sap_contentserver_systems_length}); i+=1 )); do 
                 local sid_lower=${sap_contentserver_systems_array[$i],,}
-                local SID=${sap_contenserver_systems_array[$i]}                            
+                local SID=${sap_contentserver_systems_array[$i]}                            
                 local sys_num=""
                 echo "$(date): Processing Content Server system: ${sap_contentserver_systems_array[$i]}"
                 for (( j=0; j<(${sap_contentserver_instances_length}); j+=5 )); do 
@@ -1209,8 +1209,8 @@ function_system_start(){
                         local instance_type=$(function_instance_type "${sap_abap_instances_array[$j+2]}")
                         echo "$(date): Checking DB connectivity for $instance_type ==> ${sap_abap_systems_array[$i]} -> ${sap_abap_instances_array[$j+1]}_${sap_abap_instances_array[$j+2]}${sap_abap_instances_array[$j+3]}_${sap_abap_instances_array[$j+4]}"
                         db_connectivity=0
-                        for i in {1..30}; do
-                            echo "$(date): Attempt $i: Checking DB connectivity using R3trans -d..."
+                        for k in {1..30}; do
+                            echo "$(date): Attempt $k: Checking DB connectivity using R3trans -d..."
                             su - ${sid_lower}"adm" -c "R3trans -d"
                             if [ $? -eq 0 ]; then
                                 echo "$(date): SAP Application can connect to DB. Proceeding with startup."

@@ -1,64 +1,87 @@
 #!/usr/bin/env bash
 #
-# hana_angi_cluster_preflight.sh
+# azure_suse_pacemaker_preflight.sh
 #
-# Read-only validation for SAP HANA on SLES for SAP Applications with
-# Pacemaker, SAPHanaSR-angi, Azure Fence Agent, and Azure Load Balancer.
+# Read-only validation for a Pacemaker cluster on SLES for SAP Applications
+# in Azure using Azure Fence Agent and Managed Identity.
 #
-# The script supports two modes automatically:
+# Validates:
+#   - SLES for SAP, Pacemaker, Corosync, and required packages
+#   - Basic cluster health and two-node membership
+#   - Azure Fence Agent and fence_azure_arm configuration
+#   - System-assigned Managed Identity through Azure IMDS
+#   - Optional Azure Scheduled Events resource integration
 #
-#   1. Basic cluster mode
-#      Used when HANA System Replication and HANA cluster resources have not
-#      yet been configured. It validates the Pacemaker, fencing, OS, packages,
-#      networking, and HANA installation prerequisites.
+# Run as root:
+#   ./azure_suse_pacemaker_preflight.sh
 #
-#   2. HANA active/passive validation mode
-#      Activated automatically when SAPHanaSR-angi HANA resources are found.
-#      It validates SAPHanaTopology, SAPHanaController, virtual IP, azure-lb,
-#      colocation, active/passive roles, and resource placement.
+# Optional:
+#   ./azure_suse_pacemaker_preflight.sh \
+#       --nodes sap-cl1,sap-cl2 \
+#       --resource-group my-resource-group \
+#       --subscription-id 00000000-0000-0000-0000-000000000000
 #
-# Run as root on each cluster node:
-#   ./hana_angi_cluster_preflight.sh
-#
-# Optional overrides:
-#   ./hana_angi_cluster_preflight.sh --sid PPR --instance 00 --sites SITE1,SITE2
-#
-# This script does not alter HANA, Pacemaker, Azure, fencing, or networking.
+# The script does not modify Pacemaker, Azure, systemd, or fencing settings.
 
 set -uo pipefail
 
-SID=""
-INSTANCE=""
-SITES=""
-GLOBAL_INI=""
-HSR_CONFIGURED=false
+NODES=""
+RESOURCE_GROUP=""
+SUBSCRIPTION_ID=""
 FAILURES=0
 WARNINGS=0
+
+# ---------------------------------------------------------------------------
+# Color support
+#
+# Colors are enabled only when stdout is an interactive terminal. Set
+# NO_COLOR=1 before execution to disable ANSI colors explicitly.
+# ---------------------------------------------------------------------------
+if [[ -t 1 ]] && [[ "${NO_COLOR:-}" != "1" ]]; then
+    COLOR_RESET=$'\033[0m'
+    COLOR_GREEN=$'\033[0;32m'
+    COLOR_YELLOW=$'\033[1;33m'
+    COLOR_BLUE=$'\033[0;34m'
+    COLOR_RED=$'\033[0;31m'
+else
+    COLOR_RESET=""
+    COLOR_GREEN=""
+    COLOR_YELLOW=""
+    COLOR_BLUE=""
+    COLOR_RED=""
+fi
 
 usage() {
     cat <<'EOF'
 Usage:
-  hana_angi_cluster_preflight.sh [options]
-
-Default behavior:
-  - Detects HANA SID and instance number from /usr/sap/<SID>/HDB<NN>.
-  - Runs basic Pacemaker validation even if HANA SR is not configured.
-  - Detects and validates HANA active/passive resources when present.
+  azure_suse_pacemaker_preflight.sh [options]
 
 Options:
-  --sid <SID>              Override detected SID.
-  --instance <NN>          Override detected instance number.
-  --sites <SITE1,SITE2>    Optional HANA SR site override.
-  --global-ini <path>      Override default global.ini location.
-  -h, --help               Display this help text.
+  --nodes <node1,node2>              Optional expected cluster node names.
+  --resource-group <name>            Optional expected Azure resource group.
+  --subscription-id <GUID>           Optional expected Azure subscription ID.
+  -h, --help                         Display this help text.
 
 EOF
 }
 
-pass() { printf 'PASS  %s\n' "$*"; }
-warn() { printf 'WARN  %s\n' "$*"; WARNINGS=$((WARNINGS + 1)); }
-fail() { printf 'FAIL  %s\n' "$*"; FAILURES=$((FAILURES + 1)); }
-info() { printf 'INFO  %s\n' "$*"; }
+pass() {
+    printf '%sPASS%s  %s\n' "$COLOR_GREEN" "$COLOR_RESET" "$*"
+}
+
+warn() {
+    printf '%sWARN%s  %s\n' "$COLOR_YELLOW" "$COLOR_RESET" "$*"
+    WARNINGS=$((WARNINGS + 1))
+}
+
+fail() {
+    printf '%sFAIL%s  %s\n' "$COLOR_RED" "$COLOR_RESET" "$*"
+    FAILURES=$((FAILURES + 1))
+}
+
+info() {
+    printf '%sINFO%s  %s\n' "$COLOR_BLUE" "$COLOR_RESET" "$*"
+}
 
 command_exists() {
     command -v "$1" >/dev/null 2>&1
@@ -69,10 +92,12 @@ rpm_installed() {
 }
 
 require_command() {
-    if command_exists "$1"; then
-        pass "Command available: $1"
+    local command_name="$1"
+
+    if command_exists "$command_name"; then
+        pass "Command available: ${command_name}"
     else
-        fail "Required command is missing: $1"
+        fail "Required command is missing: ${command_name}"
     fi
 }
 
@@ -86,7 +111,6 @@ check_service_active() {
     fi
 }
 
-# crm configure get_property returns the property value directly.
 get_cluster_property() {
     local property="$1"
     local value
@@ -95,17 +119,14 @@ get_cluster_property() {
     printf '%s\n' "$value"
 }
 
-check_resource_agent() {
-    local agent="$1"
+get_resource_parameter() {
+    local resource="$1"
+    local parameter="$2"
 
-    if crm ra meta "$agent" >/dev/null 2>&1; then
-        pass "Resource agent is available: ${agent}"
-    else
-        fail "Resource agent is unavailable: ${agent}"
-    fi
+    crm_resource --resource "$resource" \
+        --get-parameter "$parameter" 2>/dev/null || true
 }
 
-# Detect SLES for SAP Applications from SUSE product metadata.
 is_sles_for_sap() {
     local product_file
 
@@ -121,72 +142,6 @@ is_sles_for_sap() {
     return 1
 }
 
-# Detects /usr/sap/<SID>/HDB<NN>. Supports directories and symbolic links.
-detect_hana_installation() {
-    local path detected_sid detected_instance
-    local -a installations=()
-
-    for path in /usr/sap/*/HDB[0-9][0-9]; do
-        [[ -e "$path" || -L "$path" ]] || continue
-
-        detected_sid="$(basename "$(dirname "$path")")"
-        detected_instance="${path##*/HDB}"
-
-        if [[ "$detected_sid" =~ ^[A-Za-z0-9]{3}$ ]] &&
-           [[ "$detected_instance" =~ ^[0-9]{2}$ ]]; then
-            installations+=("${detected_sid^^}:${detected_instance}")
-        fi
-    done
-
-    if [[ ${#installations[@]} -gt 0 ]]; then
-        mapfile -t installations < <(
-            printf '%s\n' "${installations[@]}" | sort -u
-        )
-    fi
-
-    if [[ ${#installations[@]} -eq 0 ]]; then
-        fail "Could not auto-detect a HANA installation below /usr/sap"
-        info "Expected a path such as /usr/sap/<SID>/HDB<NN>"
-        return 1
-    fi
-
-    if [[ ${#installations[@]} -gt 1 ]]; then
-        fail "More than one HANA installation was detected: ${installations[*]}"
-        info "Use --sid and --instance to select the intended HANA database"
-        return 1
-    fi
-
-    IFS=':' read -r SID INSTANCE <<< "${installations[0]}"
-    pass "Auto-detected HANA installation: SID=${SID}, instance=HDB${INSTANCE}"
-    return 0
-}
-
-# Detect HANA SR sites from SAPHanaSR-angi sudoers hook attributes.
-# This is optional. It must not prevent basic Pacemaker validation.
-detect_hsr_sites() {
-    local sudoers_file="/etc/sudoers.d/20-saphana"
-    local site_prefix
-    local -a detected_sites=()
-
-    [[ -r "$sudoers_file" ]] || return 1
-
-    site_prefix="hana_${SID_LOWER}_site_srHook_"
-
-    mapfile -t detected_sites < <(
-        grep -Eo "${site_prefix}[A-Za-z0-9_.-]+" "$sudoers_file" \
-            | sed "s/^${site_prefix}//" \
-            | sort -u
-    )
-
-    if [[ ${#detected_sites[@]} -ne 2 ]]; then
-        return 1
-    fi
-
-    SITES="${detected_sites[0]},${detected_sites[1]}"
-    return 0
-}
-
-# Extracts a complete Pacemaker object definition including continuation lines.
 crm_object_block() {
     local object_id="$1"
 
@@ -207,42 +162,51 @@ crm_object_block() {
     ' /tmp/crm_config.$$
 }
 
-# Extracts role node names from crm_mon output and trims surrounding whitespace.
-# Supports both modern Promoted/Unpromoted and older Masters/Slaves labels.
-get_crm_role_nodes() {
-    local first_label="$1"
-    local second_label="$2"
-    local crm_mon_file="$3"
-
-    awk -v first_label="$first_label" -v second_label="$second_label" '
-        $0 ~ "(" first_label "|" second_label "):[[:space:]]*\\[" {
-            line = $0
-            sub(/^.*\[/, "", line)
-            sub(/\].*$/, "", line)
-            gsub(/^[[:space:]]+/, "", line)
-            gsub(/[[:space:]]+$/, "", line)
-            print line
-            exit
-        }
-    ' "$crm_mon_file"
+# Query the Azure Instance Metadata Service for system-assigned Managed Identity
+# information. This is a local link-local endpoint and does not expose a secret.
+# Queries basic Managed Identity metadata. This commonly returns tenantId.
+get_managed_identity_info() {
+    curl \
+        --silent \
+        --show-error \
+        --fail \
+        --connect-timeout 3 \
+        --max-time 10 \
+        --noproxy "*" \
+        --header "Metadata: true" \
+        "http://169.254.169.254/metadata/identity/info?api-version=2018-02-01"
 }
+
+# Requests an Azure Resource Manager access token through IMDS.
+#
+# A successful response containing access_token proves that Managed Identity
+# authentication is operational. Never print, store, or log this response
+# because it contains a sensitive bearer token.
+get_managed_identity_token() {
+    curl \
+        --silent \
+        --show-error \
+        --fail \
+        --connect-timeout 3 \
+        --max-time 10 \
+        --noproxy "*" \
+        --header "Metadata: true" \
+        "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fmanagement.azure.com%2F"
+}
+
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --sid)
-            SID="${2:-}"
+        --nodes)
+            NODES="${2:-}"
             shift 2
             ;;
-        --instance)
-            INSTANCE="${2:-}"
+        --resource-group)
+            RESOURCE_GROUP="${2:-}"
             shift 2
             ;;
-        --sites)
-            SITES="${2:-}"
-            shift 2
-            ;;
-        --global-ini)
-            GLOBAL_INI="${2:-}"
+        --subscription-id)
+            SUBSCRIPTION_ID="${2:-}"
             shift 2
             ;;
         -h|--help)
@@ -250,7 +214,8 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         *)
-            printf 'Unknown argument: %s\n\n' "$1" >&2
+            printf '%sUnknown argument: %s%s\n\n' \
+                "$COLOR_RED" "$1" "$COLOR_RESET" >&2
             usage
             exit 2
             ;;
@@ -258,91 +223,39 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ $EUID -ne 0 ]]; then
-    printf 'This script must be run as root.\n' >&2
+    printf '%sThis script must be run as root.%s\n' \
+        "$COLOR_RED" "$COLOR_RESET" >&2
     exit 2
-fi
-
-if [[ -z "$SID" && -z "$INSTANCE" ]]; then
-    detect_hana_installation || exit 2
-elif [[ -z "$SID" || -z "$INSTANCE" ]]; then
-    printf 'Specify both --sid and --instance, or omit both for auto-detection.\n' >&2
-    exit 2
-fi
-
-if ! [[ "$SID" =~ ^[A-Za-z0-9]{3}$ ]]; then
-    printf 'SID must be a three-character SAP system ID.\n' >&2
-    exit 2
-fi
-
-if ! [[ "$INSTANCE" =~ ^[0-9]{2}$ ]]; then
-    printf 'Instance number must contain two digits, for example: 00 or 03.\n' >&2
-    exit 2
-fi
-
-SID="${SID^^}"
-SID_LOWER="${SID,,}"
-
-if [[ -z "$GLOBAL_INI" ]]; then
-    GLOBAL_INI="/hana/shared/${SID}/global/hdb/custom/config/global.ini"
-fi
-
-# Sites are optional until HANA SR hooks are configured.
-if [[ -z "$SITES" ]]; then
-    if detect_hsr_sites; then
-        HSR_CONFIGURED=true
-        IFS=',' read -r -a SITE_ARRAY <<< "$SITES"
-        pass "Auto-detected HSR sites: ${SITES}"
-    else
-        SITE_ARRAY=()
-        info "HANA SR hook sudoers configuration was not found; basic Pacemaker validation mode is active"
-    fi
-else
-    IFS=',' read -r -a SITE_ARRAY <<< "$SITES"
-
-    if [[ ${#SITE_ARRAY[@]} -ne 2 ]] ||
-       [[ -z "${SITE_ARRAY[0]}" ]] ||
-       [[ -z "${SITE_ARRAY[1]}" ]]; then
-        printf 'Exactly two HSR sites are required, for example: SITE1,SITE2.\n' >&2
-        exit 2
-    fi
-
-    HSR_CONFIGURED=true
 fi
 
 HOST="$(hostname -s)"
 
 printf '\n============================================================\n'
-printf 'HANA SAPHanaSR-angi cluster preflight\n'
-printf 'Host: %s | SID: %s | Instance: HDB%s\n' "$HOST" "$SID" "$INSTANCE"
+printf 'Azure SUSE Pacemaker cluster preflight\n'
+printf 'Host: %s\n' "$HOST"
 printf '============================================================\n'
 
-# ===========================================================================
-# Operating system and required commands
-# ===========================================================================
-printf '\n--- Operating system and base commands ---\n'
+info "This script is read-only. It does not alter CRM, Azure, systemd, or fencing configuration."
 
-require_command rpm
-require_command systemctl
-require_command crm
-require_command crm_mon
-require_command crm_node
-require_command crm_resource
-require_command cibadmin
-require_command visudo
-require_command findmnt
-require_command getent
-require_command awk
-require_command grep
-require_command sed
+# ===========================================================================
+# Operating system and required command validation
+# ===========================================================================
+printf '\n--- Operating system and commands ---\n'
+
+for command_name in \
+    rpm systemctl crm crm_mon crm_node crm_resource cibadmin \
+    getent awk grep sed curl; do
+    require_command "$command_name"
+done
 
 if [[ -r /etc/os-release ]]; then
     . /etc/os-release
     pass "Operating system detected: ${PRETTY_NAME:-unknown}"
 
     if awk "BEGIN {exit !(${VERSION_ID:-0} >= 15.4)}" 2>/dev/null; then
-        pass "SLES version meets SAPHanaSR-angi minimum requirement of SLES 15 SP4"
+        pass "SLES version meets the documented SLES for SAP 15 SP4+ baseline"
     else
-        fail "SAPHanaSR-angi requires at least SLES for SAP Applications 15 SP4"
+        warn "Detected SLES version may be below the documented SLES for SAP 15 SP4+ baseline"
     fi
 else
     fail "Cannot read /etc/os-release"
@@ -351,78 +264,100 @@ fi
 if is_sles_for_sap; then
     pass "SLES for SAP Applications product detected in /etc/products.d"
 else
-    fail "SLES for SAP Applications was not detected in /etc/products.d"
+    warn "SLES for SAP Applications product was not detected in /etc/products.d"
 fi
 
 # ===========================================================================
-# HANA installation, packages, and base Pacemaker cluster
+# Package validation
 # ===========================================================================
-printf '\n--- HANA, SAPHanaSR-angi, and Pacemaker prerequisites ---\n'
+printf '\n--- Pacemaker and fencing packages ---\n'
 
-if rpm_installed "SAPHanaSR-angi"; then
-    pass "SAPHanaSR-angi package installed: $(rpm -q SAPHanaSR-angi)"
-else
-    fail "SAPHanaSR-angi is not installed"
-fi
-
-if rpm_installed "SAPHanaSR"; then
-    fail "Classic SAPHanaSR is installed. SAPHanaSR and SAPHanaSR-angi are mutually exclusive."
-else
-    pass "Classic SAPHanaSR package is not installed"
-fi
-
-check_resource_agent "ocf:suse:SAPHanaTopology"
-check_resource_agent "ocf:suse:SAPHanaController"
-check_resource_agent "ocf:heartbeat:IPaddr2"
-check_resource_agent "ocf:heartbeat:azure-lb"
-
-if id "${SID_LOWER}adm" >/dev/null 2>&1; then
-    pass "HANA operating-system user exists: ${SID_LOWER}adm"
-
-    if su - "${SID_LOWER}adm" -c "HDB version" >/tmp/hana_version.$$ 2>&1; then
-        pass "HANA command environment is operational for ${SID_LOWER}adm"
-        sed 's/^/INFO  HANA: /' /tmp/hana_version.$$ | head -n 4
+for package in pacemaker resource-agents socat fence-agents-azure-arm; do
+    if rpm_installed "$package"; then
+        pass "Package installed: ${package} ($(rpm -q "$package"))"
     else
-        warn "Unable to execute 'HDB version' as ${SID_LOWER}adm"
+        fail "Required package is missing: ${package}"
     fi
+done
 
-    rm -f /tmp/hana_version.$$
+if crm ra meta "stonith:fence_azure_arm" >/dev/null 2>&1 ||
+   command_exists fence_azure_arm; then
+    pass "Azure Fence Agent is available"
 else
-    fail "HANA operating-system user does not exist: ${SID_LOWER}adm"
+    fail "Azure Fence Agent is unavailable"
 fi
+
+if crm ra meta "ocf:heartbeat:azure-events-az" >/dev/null 2>&1; then
+    pass "azure-events-az resource agent is available"
+else
+    warn "azure-events-az resource agent is unavailable"
+fi
+
+# ===========================================================================
+# Azure Managed Identity validation
+# ===========================================================================
+printf '\n--- Azure Managed Identity ---\n'
+
+# The identity-info endpoint typically provides tenant information. It might
+# not return a principalId, so principalId is not used as a mandatory check.
+if MANAGED_IDENTITY_INFO="$(get_managed_identity_info 2>/tmp/managed_identity_info_error.$$)"; then
+    if grep -qE '"tenantId"[[:space:]]*:[[:space:]]*"[0-9a-fA-F-]+"' \
+        <<< "$MANAGED_IDENTITY_INFO"; then
+
+        MANAGED_IDENTITY_TENANT_ID="$(
+            sed -n 's/.*"tenantId"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+                <<< "$MANAGED_IDENTITY_INFO"
+        )"
+
+        pass "Managed Identity tenant ID is available through Azure IMDS"
+        info "Managed Identity tenant ID: ${MANAGED_IDENTITY_TENANT_ID}"
+    else
+        warn "Azure IMDS identity information does not contain a tenant ID"
+    fi
+else
+    warn "Unable to query Azure IMDS identity information endpoint"
+    info "Azure IMDS error: $(cat /tmp/managed_identity_info_error.$$ 2>/dev/null)"
+fi
+
+rm -f /tmp/managed_identity_info_error.$$
+
+# Requesting a token is the functional Managed Identity validation. The
+# response is deliberately never displayed because it includes access_token.
+if MANAGED_IDENTITY_TOKEN_RESPONSE="$(get_managed_identity_token 2>/tmp/managed_identity_token_error.$$)"; then
+    if grep -qE '"access_token"[[:space:]]*:' \
+        <<< "$MANAGED_IDENTITY_TOKEN_RESPONSE"; then
+        pass "Managed Identity can obtain an Azure Resource Manager access token"
+    else
+        fail "Azure IMDS token endpoint responded without an access_token"
+    fi
+else
+    fail "Managed Identity could not obtain an Azure Resource Manager access token"
+    info "Azure IMDS error: $(cat /tmp/managed_identity_token_error.$$ 2>/dev/null)"
+fi
+
+# Explicitly remove the token response from the shell variable. Do not log it.
+unset MANAGED_IDENTITY_TOKEN_RESPONSE
+
+rm -f /tmp/managed_identity_token_error.$$
+
+
+# ===========================================================================
+# Pacemaker and Corosync cluster validation
+# ===========================================================================
+printf '\n--- Pacemaker and Corosync cluster ---\n'
 
 check_service_active corosync
 check_service_active pacemaker
 
 if crm_mon -1 >/tmp/crm_mon.$$ 2>&1; then
     pass "Pacemaker cluster is queryable"
-    grep -E 'Online:|OFFLINE:|RemoteOnline:' /tmp/crm_mon.$$ | sed 's/^/INFO  /'
+    grep -E 'Online:|OFFLINE:|RemoteOnline:' /tmp/crm_mon.$$ \
+        | sed "s/^/${COLOR_BLUE}INFO${COLOR_RESET}  /"
 else
     fail "crm_mon could not query the cluster"
 fi
 
 rm -f /tmp/crm_mon.$$
-
-STONITH_ENABLED="$(get_cluster_property stonith-enabled || true)"
-if [[ "$STONITH_ENABLED" == "true" ]]; then
-    pass "Cluster property stonith-enabled=true"
-else
-    fail "Cluster property stonith-enabled must be true; current value: '${STONITH_ENABLED:-unset}'"
-fi
-
-NO_QUORUM_POLICY="$(get_cluster_property no-quorum-policy || true)"
-if [[ -n "$NO_QUORUM_POLICY" ]]; then
-    info "Cluster property no-quorum-policy=${NO_QUORUM_POLICY}"
-else
-    warn "Cluster property no-quorum-policy is not explicitly configured"
-fi
-
-PRIORITY_FENCING_DELAY="$(get_cluster_property priority-fencing-delay || true)"
-if [[ -n "$PRIORITY_FENCING_DELAY" ]]; then
-    pass "Cluster property priority-fencing-delay=${PRIORITY_FENCING_DELAY}"
-else
-    warn "priority-fencing-delay is not configured"
-fi
 
 if cibadmin -Q >/tmp/cib.$$ 2>/dev/null; then
     pass "Cluster Information Base (CIB) is readable"
@@ -431,115 +366,93 @@ else
     : >/tmp/cib.$$
 fi
 
-# ===========================================================================
-# Azure fencing and networking
-# ===========================================================================
-printf '\n--- Azure fencing and networking ---\n'
-
-if crm ra meta "stonith:fence_azure_arm" >/dev/null 2>&1 ||
-   command_exists fence_azure_arm; then
-    pass "Azure Fence Agent is installed and available"
-else
-    fail "Azure Fence Agent is unavailable"
-fi
-
-mapfile -t AZURE_FENCE_RESOURCES < <(
-    crm configure show 2>/dev/null \
-        | awk '$1 == "primitive" && $0 ~ /fence_azure_arm/ {print $2}'
+mapfile -t CLUSTER_NODES < <(
+    crm_node -l 2>/dev/null \
+        | awk '{print $2}' \
+        | sort -u
 )
 
-if [[ ${#AZURE_FENCE_RESOURCES[@]} -eq 0 ]]; then
-    fail "No Pacemaker STONITH resource using fence_azure_arm is configured"
+if [[ ${#CLUSTER_NODES[@]} -eq 2 ]]; then
+    pass "Two cluster nodes detected: ${CLUSTER_NODES[*]}"
+elif [[ ${#CLUSTER_NODES[@]} -gt 2 ]]; then
+    warn "More than two cluster nodes detected: ${CLUSTER_NODES[*]}"
 else
-    for fence_resource in "${AZURE_FENCE_RESOURCES[@]}"; do
-        pass "Azure fencing resource configured: ${fence_resource}"
+    fail "Expected at least two cluster nodes; detected: ${CLUSTER_NODES[*]:-none}"
+fi
 
-        host_map="$(
-            crm_resource --resource "$fence_resource" \
-                --get-parameter pcmk_host_map 2>/dev/null || true
-        )"
+if [[ -n "$NODES" ]]; then
+    IFS=',' read -r -a EXPECTED_NODES <<< "$NODES"
 
-        if [[ -n "$host_map" && "$host_map" != "default" ]]; then
-            pass "Azure fence resource ${fence_resource} has pcmk_host_map configured"
+    for expected_node in "${EXPECTED_NODES[@]}"; do
+        if printf '%s\n' "${CLUSTER_NODES[@]}" | grep -qx "$expected_node"; then
+            pass "Expected cluster node found: ${expected_node}"
         else
-            warn "Azure fence resource ${fence_resource} has no explicit pcmk_host_map"
-        fi
-
-        fence_delay="$(
-            crm_resource --resource "$fence_resource" \
-                --get-parameter pcmk_delay_max 2>/dev/null || true
-        )"
-
-        if [[ -n "$fence_delay" && "$fence_delay" != "default" ]]; then
-            pass "Azure fence resource ${fence_resource} has pcmk_delay_max=${fence_delay}"
-        else
-            warn "pcmk_delay_max is not explicitly configured on ${fence_resource}"
+            fail "Expected cluster node not found: ${expected_node}"
         fi
     done
 fi
 
-if grep -qiE 'fence[_-]netapp|netapp' /tmp/cib.$$; then
-    fail "A NetApp-related fencing configuration was found in the CIB"
-else
-    pass "No NetApp fencing configuration found in the CIB"
-fi
-
-TCP_TIMESTAMPS="$(sysctl -n net.ipv4.tcp_timestamps 2>/dev/null || true)"
-
-if [[ "$TCP_TIMESTAMPS" == "0" ]]; then
-    pass "net.ipv4.tcp_timestamps=0"
-else
-    fail "net.ipv4.tcp_timestamps must be 0 for Azure Load Balancer health probes"
-fi
-
-while read -r cluster_node; do
-    [[ -z "$cluster_node" ]] && continue
-
+for cluster_node in "${CLUSTER_NODES[@]}"; do
     if getent hosts "$cluster_node" >/dev/null 2>&1; then
         pass "Hostname resolution works for cluster node: ${cluster_node}"
     else
         fail "Hostname resolution failed for cluster node: ${cluster_node}"
     fi
-done < <(crm_node -l 2>/dev/null | awk '{print $2}')
-
-# ===========================================================================
-# HANA storage
-# ===========================================================================
-printf '\n--- HANA storage ---\n'
-
-for hana_mount in "/hana/data/${SID}" "/hana/log/${SID}" "/hana/shared/${SID}"; do
-    if findmnt -T "$hana_mount" >/dev/null 2>&1; then
-        mount_type="$(findmnt -n -o FSTYPE -T "$hana_mount" 2>/dev/null)"
-        mount_source="$(findmnt -n -o SOURCE -T "$hana_mount" 2>/dev/null)"
-        pass "Mount available: ${hana_mount} (${mount_type}, ${mount_source})"
-
-        if [[ "$mount_type" =~ ^nfs ]]; then
-            warn "${hana_mount} uses ${mount_type}; validate the intended shared-storage architecture"
-        fi
-    else
-        fail "Required HANA mount is unavailable: ${hana_mount}"
-    fi
 done
 
+TOKEN_VALUE="$(crm corosync get totem.token 2>/dev/null || true)"
+
+if [[ "$TOKEN_VALUE" == "30000" ]]; then
+    pass "Corosync totem.token is configured to 30000"
+elif [[ -n "$TOKEN_VALUE" ]]; then
+    warn "Corosync totem.token is '${TOKEN_VALUE}', not the documented value of 30000"
+else
+    warn "Unable to read Corosync totem.token"
+fi
+
+STONITH_ENABLED="$(get_cluster_property stonith-enabled || true)"
+
+if [[ "$STONITH_ENABLED" == "true" ]]; then
+    pass "Cluster property stonith-enabled=true"
+else
+    fail "Cluster property stonith-enabled must be true; current value: '${STONITH_ENABLED:-unset}'"
+fi
+
+STONITH_TIMEOUT="$(get_cluster_property stonith-timeout || true)"
+
+if [[ "$STONITH_TIMEOUT" == "900" || "$STONITH_TIMEOUT" == "900s" ]]; then
+    pass "Cluster property stonith-timeout=${STONITH_TIMEOUT}"
+elif [[ -n "$STONITH_TIMEOUT" ]]; then
+    warn "stonith-timeout is '${STONITH_TIMEOUT}', while Microsoft guidance uses 900 seconds"
+else
+    warn "Cluster property stonith-timeout is not explicitly configured"
+fi
+
 # ===========================================================================
-# Detect whether SAPHanaSR-angi resources already exist
+# Pacemaker delayed startup validation
 # ===========================================================================
-RSC_TOPOLOGY="rsc_SAPHanaTopology_${SID}_HDB${INSTANCE}"
-CLN_TOPOLOGY="cln_SAPHanaTopology_${SID}_HDB${INSTANCE}"
+printf '\n--- Pacemaker startup delay ---\n'
 
-RSC_CONTROLLER="rsc_SAPHanaController_${SID}_HDB${INSTANCE}"
-MSL_CONTROLLER="msl_SAPHanaController_${SID}_HDB${INSTANCE}"
+if systemctl is-enabled --quiet pacemaker.timer; then
+    pass "pacemaker.timer is enabled"
+else
+    warn "pacemaker.timer is not enabled"
+fi
 
-RSC_IP="rsc_ip_${SID}_HDB${INSTANCE}"
-RSC_AZURE_LB="rsc_nc_${SID}_HDB${INSTANCE}"
-GRP_IP="g_ip_${SID}_HDB${INSTANCE}"
+if [[ -r /etc/systemd/system/pacemaker.timer ]]; then
+    if grep -qE '^OnBootSec=216$' /etc/systemd/system/pacemaker.timer; then
+        pass "pacemaker.timer uses the documented OnBootSec=216 delay"
+    else
+        warn "pacemaker.timer exists but OnBootSec=216 was not found"
+    fi
+else
+    warn "Custom /etc/systemd/system/pacemaker.timer file was not found"
+fi
 
-COL_IP="col_saphana_ip_${SID}_HDB${INSTANCE}"
-ORD_HANA="ord_SAPHana_${SID}_HDB${INSTANCE}"
-
-RSC_SECONDARY_IP="rsc_secip_${SID}_HDB${INSTANCE}"
-RSC_SECONDARY_AZURE_LB="rsc_secnc_${SID}_HDB${INSTANCE}"
-GRP_SECONDARY_IP="g_secip_${SID}_HDB${INSTANCE}"
+# ===========================================================================
+# Azure Fence Agent validation
+# ===========================================================================
+printf '\n--- Azure Fence Agent configuration ---\n'
 
 if crm configure show >/tmp/crm_config.$$ 2>/dev/null; then
     pass "Pacemaker configuration is queryable"
@@ -548,300 +461,199 @@ else
     : >/tmp/crm_config.$$
 fi
 
-if grep -qE "(${RSC_TOPOLOGY}|${RSC_CONTROLLER}|${CLN_TOPOLOGY}|${MSL_CONTROLLER})" \
-    /tmp/crm_config.$$; then
-    HSR_CONFIGURED=true
+mapfile -t AZURE_FENCE_RESOURCES < <(
+    awk '$1 == "primitive" && $0 ~ /fence_azure_arm/ {print $2}' \
+        /tmp/crm_config.$$
+)
+
+if [[ ${#AZURE_FENCE_RESOURCES[@]} -eq 0 ]]; then
+    fail "No Pacemaker STONITH resource using fence_azure_arm is configured"
+elif [[ ${#AZURE_FENCE_RESOURCES[@]} -gt 1 ]]; then
+    warn "More than one Azure Fence Agent resource is configured: ${AZURE_FENCE_RESOURCES[*]}"
+else
+    pass "Azure Fence Agent resource configured: ${AZURE_FENCE_RESOURCES[0]}"
 fi
 
-# ===========================================================================
-# HANA SR hooks and resource checks, only when HSR is configured
-# ===========================================================================
-if [[ "$HSR_CONFIGURED" != true ]]; then
-    printf '\n--- HANA SR configuration ---\n'
-    info "HANA System Replication hooks and HANA cluster resources are not configured yet"
-    info "Basic Pacemaker validation completed; HANA SR-specific checks are skipped"
-else
-    printf '\n--- HANA System Replication, hooks, and active/passive resources ---\n'
+for fence_resource in "${AZURE_FENCE_RESOURCES[@]}"; do
+    FENCE_CFG="$(crm_object_block "$fence_resource")"
 
-    if [[ ${#SITE_ARRAY[@]} -ne 2 ]]; then
-        fail "HANA SR resources are configured but exactly two HSR sites could not be detected"
-        info "Specify them with: --sites SITE1,SITE2"
+    MSI_VALUE="$(get_resource_parameter "$fence_resource" "msi")"
+
+    if [[ "$MSI_VALUE" == "true" ]]; then
+        pass "Azure Fence Agent uses Managed Identity authentication: msi=true"
     else
-        pass "HANA SR sites available for validation: ${SITES}"
+        fail "Azure Fence Agent must use Managed Identity authentication: msi=true"
     fi
 
-    if su - "${SID_LOWER}adm" -c "hdbnsutil -sr_state" >/tmp/sr_state.$$ 2>&1; then
-        pass "HANA System Replication state is queryable"
-        sed 's/^/INFO  SR: /' /tmp/sr_state.$$ | head -n 40
-
-        if grep -qiE 'primary|secondary' /tmp/sr_state.$$; then
-            pass "HANA System Replication roles are present"
-        else
-            fail "HANA System Replication output does not show a primary or secondary role"
-        fi
+    if [[ -n "${MANAGED_IDENTITY_INFO:-}" ]]; then
+        pass "Azure Fence Agent has an available system-assigned Managed Identity"
     else
-        fail "Unable to query HANA System Replication with hdbnsutil -sr_state"
+        fail "Azure Fence Agent is configured for Managed Identity but the local Managed Identity check failed"
     fi
 
-    rm -f /tmp/sr_state.$$
+    FENCE_RG="$(get_resource_parameter "$fence_resource" "resourceGroup")"
 
-    if [[ -r "$GLOBAL_INI" ]]; then
-        pass "HANA global.ini found: ${GLOBAL_INI}"
+    if [[ -n "$FENCE_RG" && "$FENCE_RG" != "default" ]]; then
+        pass "Azure Fence Agent resourceGroup is configured"
 
-        if grep -qE '^[[:space:]]*provider[[:space:]]*=[[:space:]]*susHanaSR[[:space:]]*$' "$GLOBAL_INI"; then
-            pass "susHanaSR HA/DR provider is configured"
-        else
-            fail "susHanaSR HA/DR provider is not configured"
-        fi
-
-        if grep -qE '^[[:space:]]*provider[[:space:]]*=[[:space:]]*susChkSrv[[:space:]]*$' "$GLOBAL_INI"; then
-            pass "susChkSrv HA/DR provider is configured"
-        else
-            warn "susChkSrv HA/DR provider is not configured"
+        if [[ -n "$RESOURCE_GROUP" && "$FENCE_RG" != "$RESOURCE_GROUP" ]]; then
+            fail "Azure Fence Agent resourceGroup '${FENCE_RG}' does not match expected '${RESOURCE_GROUP}'"
         fi
     else
-        fail "Cannot read HANA global.ini: ${GLOBAL_INI}"
+        fail "Azure Fence Agent resourceGroup is not configured"
     fi
 
-    SUDOERS_FILE="/etc/sudoers.d/20-saphana"
+    FENCE_SUBSCRIPTION="$(get_resource_parameter "$fence_resource" "subscriptionId")"
 
-    if [[ -r "$SUDOERS_FILE" ]]; then
-        if visudo -cf "$SUDOERS_FILE" >/dev/null 2>&1; then
-            pass "SAPHanaSR-angi sudoers file has valid syntax"
-        else
-            fail "Invalid sudoers syntax: ${SUDOERS_FILE}"
+    if [[ -n "$FENCE_SUBSCRIPTION" && "$FENCE_SUBSCRIPTION" != "default" ]]; then
+        pass "Azure Fence Agent subscriptionId is configured"
+
+        if [[ -n "$SUBSCRIPTION_ID" && "$FENCE_SUBSCRIPTION" != "$SUBSCRIPTION_ID" ]]; then
+            fail "Azure Fence Agent subscriptionId does not match the supplied expected subscription ID"
         fi
+    else
+        fail "Azure Fence Agent subscriptionId is not configured"
+    fi
 
-        if grep -q "${SID_LOWER}adm" "$SUDOERS_FILE"; then
-            pass "sudoers file contains permissions for ${SID_LOWER}adm"
-        else
-            fail "sudoers file does not contain permissions for ${SID_LOWER}adm"
-        fi
+    HOST_MAP="$(get_resource_parameter "$fence_resource" "pcmk_host_map")"
 
-        for site in "${SITE_ARRAY[@]}"; do
-            if grep -q "hana_${SID_LOWER}_site_srHook_${site}" "$SUDOERS_FILE"; then
-                pass "sudoers permissions found for HANA site hook: ${site}"
+    if [[ -n "$HOST_MAP" && "$HOST_MAP" != "default" ]]; then
+        pass "Azure Fence Agent pcmk_host_map is configured"
+
+        for cluster_node in "${CLUSTER_NODES[@]}"; do
+            if grep -qE "(^|;)${cluster_node}:" <<< "$HOST_MAP"; then
+                pass "Azure VM mapping exists for cluster node: ${cluster_node}"
             else
-                fail "Missing sudoers permissions for HANA site hook: ${site}"
+                fail "Azure VM mapping is missing for cluster node: ${cluster_node}"
             fi
         done
     else
-        fail "Required SAPHanaSR-angi sudoers file is missing: ${SUDOERS_FILE}"
+        fail "Azure Fence Agent pcmk_host_map is not configured"
     fi
 
-    TOPOLOGY_CFG="$(crm_object_block "$RSC_TOPOLOGY")"
-    TOPOLOGY_CLONE_CFG="$(crm_object_block "$CLN_TOPOLOGY")"
-    CONTROLLER_CFG="$(crm_object_block "$RSC_CONTROLLER")"
-    CONTROLLER_CLONE_CFG="$(crm_object_block "$MSL_CONTROLLER")"
-    IP_CFG="$(crm_object_block "$RSC_IP")"
-    AZURE_LB_CFG="$(crm_object_block "$RSC_AZURE_LB")"
-    IP_GROUP_CFG="$(crm_object_block "$GRP_IP")"
-    IP_COLOCATION_CFG="$(crm_object_block "$COL_IP")"
-    HANA_ORDER_CFG="$(crm_object_block "$ORD_HANA")"
+    for parameter_check in \
+        "power_timeout:240" \
+        "pcmk_reboot_timeout:900" \
+        "pcmk_monitor_timeout:120" \
+        "pcmk_monitor_retries:4" \
+        "pcmk_action_limit:3" \
+        "pcmk_delay_max:15"; do
 
-    if grep -qE "^primitive[[:space:]]+${RSC_TOPOLOGY}[[:space:]]+(ocf:suse:)?SAPHanaTopology([[:space:]]|$)" <<< "$TOPOLOGY_CFG"; then
-        pass "SAPHanaTopology primitive is configured: ${RSC_TOPOLOGY}"
-    else
-        fail "Missing or invalid SAPHanaTopology primitive: ${RSC_TOPOLOGY}"
-    fi
+        parameter_name="${parameter_check%%:*}"
+        expected_value="${parameter_check##*:}"
+        actual_value="$(get_resource_parameter "$fence_resource" "$parameter_name")"
 
-    if grep -qE "^clone[[:space:]]+${CLN_TOPOLOGY}[[:space:]]+${RSC_TOPOLOGY}([[:space:]]|$)" <<< "$TOPOLOGY_CLONE_CFG"; then
-        pass "SAPHanaTopology clone is configured: ${CLN_TOPOLOGY}"
-    else
-        fail "Missing or invalid SAPHanaTopology clone: ${CLN_TOPOLOGY}"
-    fi
-
-    if grep -qE '(^|[[:space:]])clone-node-max="?1"?([[:space:]]|$)' <<< "$TOPOLOGY_CLONE_CFG"; then
-        pass "SAPHanaTopology clone-node-max is set to 1"
-    else
-        warn "Could not confirm clone-node-max=1 for ${CLN_TOPOLOGY}"
-    fi
-
-    if grep -qE '(^|[[:space:]])interleave="?true"?([[:space:]]|$)' <<< "$TOPOLOGY_CLONE_CFG"; then
-        pass "SAPHanaTopology clone interleave is enabled"
-    else
-        warn "Could not confirm interleave=true for ${CLN_TOPOLOGY}"
-    fi
-
-    if grep -qE "^primitive[[:space:]]+${RSC_CONTROLLER}[[:space:]]+(ocf:suse:)?SAPHanaController([[:space:]]|$)" <<< "$CONTROLLER_CFG"; then
-        pass "SAPHanaController primitive is configured: ${RSC_CONTROLLER}"
-    else
-        fail "Missing or invalid SAPHanaController primitive: ${RSC_CONTROLLER}"
-    fi
-
-    if grep -qE "^clone[[:space:]]+${MSL_CONTROLLER}[[:space:]]+${RSC_CONTROLLER}([[:space:]]|$)" <<< "$CONTROLLER_CLONE_CFG"; then
-        pass "SAPHanaController clone is configured: ${MSL_CONTROLLER}"
-    else
-        fail "Missing or invalid SAPHanaController clone: ${MSL_CONTROLLER}"
-    fi
-
-    if grep -qE '(^|[[:space:]])promotable="?true"?([[:space:]]|$)' <<< "$CONTROLLER_CLONE_CFG"; then
-        pass "SAPHanaController clone is configured as promotable"
-    else
-        fail "SAPHanaController clone is not configured as promotable"
-    fi
-
-    if grep -qE '(^|[[:space:]])clone-node-max="?1"?([[:space:]]|$)' <<< "$CONTROLLER_CLONE_CFG"; then
-        pass "SAPHanaController clone-node-max is set to 1"
-    else
-        warn "Could not confirm clone-node-max=1 for ${MSL_CONTROLLER}"
-    fi
-
-    if grep -qE '(^|[[:space:]])interleave="?true"?([[:space:]]|$)' <<< "$CONTROLLER_CLONE_CFG"; then
-        pass "SAPHanaController clone interleave is enabled"
-    else
-        warn "Could not confirm interleave=true for ${MSL_CONTROLLER}"
-    fi
-
-    if grep -qE "^primitive[[:space:]]+${RSC_IP}[[:space:]]+(ocf:heartbeat:)?IPaddr2([[:space:]]|$)" <<< "$IP_CFG"; then
-        pass "Primary virtual IP resource is configured: ${RSC_IP}"
-    else
-        fail "Missing or invalid primary virtual IP resource: ${RSC_IP}"
-    fi
-
-    if grep -qE "^primitive[[:space:]]+${RSC_AZURE_LB}[[:space:]]+azure-lb([[:space:]]|$)" <<< "$AZURE_LB_CFG"; then
-        pass "Azure Load Balancer probe resource is configured: ${RSC_AZURE_LB}"
-    else
-        fail "Missing or invalid Azure Load Balancer probe resource: ${RSC_AZURE_LB}"
-    fi
-
-    EXPECTED_PROBE_PORT="625${INSTANCE}"
-
-    if grep -qE '(^|[[:space:]])port='"${EXPECTED_PROBE_PORT}"'([[:space:]]|$)' <<< "$AZURE_LB_CFG"; then
-        pass "Azure Load Balancer probe uses expected port: ${EXPECTED_PROBE_PORT}"
-    else
-        fail "Azure Load Balancer probe port ${EXPECTED_PROBE_PORT} was not found for ${RSC_AZURE_LB}"
-    fi
-
-    if grep -qE "^group[[:space:]]+${GRP_IP}([[:space:]]|$)" <<< "$IP_GROUP_CFG" &&
-       grep -qF "$RSC_IP" <<< "$IP_GROUP_CFG" &&
-       grep -qF "$RSC_AZURE_LB" <<< "$IP_GROUP_CFG"; then
-        pass "Primary virtual IP and Azure Load Balancer probe are grouped: ${GRP_IP}"
-    else
-        fail "Missing or invalid primary IP group: ${GRP_IP}"
-    fi
-
-    if grep -qF "${GRP_IP}:Started" <<< "$IP_COLOCATION_CFG" &&
-       grep -qE "${MSL_CONTROLLER}:(Promoted|Master)" <<< "$IP_COLOCATION_CFG"; then
-        pass "Primary IP group is colocated with the primary HANA controller"
-    else
-        fail "Missing expected colocation between ${GRP_IP} and ${MSL_CONTROLLER}"
-    fi
-
-    if [[ -n "$HANA_ORDER_CFG" ]] &&
-       grep -qF "$CLN_TOPOLOGY" <<< "$HANA_ORDER_CFG" &&
-       grep -qF "$MSL_CONTROLLER" <<< "$HANA_ORDER_CFG"; then
-        pass "Topology-to-controller ordering constraint is configured"
-    else
-        warn "Topology-to-controller ordering constraint ${ORD_HANA} was not found"
-    fi
-
-    if grep -qE "${RSC_SECONDARY_IP}|${RSC_SECONDARY_AZURE_LB}|${GRP_SECONDARY_IP}" /tmp/crm_config.$$; then
-        fail "Secondary read-enabled IP resources were found. This is not an active/passive-only configuration."
-    else
-        pass "No secondary read-enabled IP resources were found"
-    fi
-
-    printf '\n--- Validate active/passive runtime state ---\n'
-
-    if crm_mon -1 -r >/tmp/crm_mon_resources.$$ 2>&1; then
-        pass "Pacemaker runtime resource status is queryable"
-    else
-        fail "Unable to read runtime resource status with 'crm_mon -1 -r'"
-        : >/tmp/crm_mon_resources.$$
-    fi
-
-    if grep -q "Failed Resource Actions:" /tmp/crm_mon_resources.$$ ||
-       grep -q "Failed Actions:" /tmp/crm_mon_resources.$$; then
-        fail "Pacemaker reports failed resource actions"
-    else
-        pass "Pacemaker reports no failed resource actions"
-    fi
-
-    PRIMARY_NODES="$(
-        get_crm_role_nodes "Promoted" "Masters" /tmp/crm_mon_resources.$$
-    )"
-
-    SECONDARY_NODES="$(
-        get_crm_role_nodes "Unpromoted" "Slaves" /tmp/crm_mon_resources.$$
-    )"
-
-    PRIMARY_COUNT="$(wc -w <<< "$PRIMARY_NODES")"
-    SECONDARY_COUNT="$(wc -w <<< "$SECONDARY_NODES")"
-
-    if [[ "$PRIMARY_COUNT" -eq 1 ]]; then
-        pass "Exactly one SAPHanaController instance has the primary role: ${PRIMARY_NODES}"
-    else
-        fail "Expected exactly one primary SAPHanaController instance; found: '${PRIMARY_NODES:-none}'"
-    fi
-
-    if [[ "$SECONDARY_COUNT" -eq 1 ]]; then
-        pass "Exactly one SAPHanaController instance has the secondary role: ${SECONDARY_NODES}"
-    else
-        fail "Expected exactly one secondary SAPHanaController instance; found: '${SECONDARY_NODES:-none}'"
-    fi
-
-    VIP_NODE="$(
-        awk -v resource="$RSC_IP" '
-            index($0, resource) && $0 ~ /Started/ {
-                print $NF
-                exit
-            }
-        ' /tmp/crm_mon_resources.$$
-    )"
-
-    AZURE_LB_NODE="$(
-        awk -v resource="$RSC_AZURE_LB" '
-            index($0, resource) && $0 ~ /Started/ {
-                print $NF
-                exit
-            }
-        ' /tmp/crm_mon_resources.$$
-    )"
-
-    if [[ -n "$VIP_NODE" ]]; then
-        pass "Primary virtual IP resource is running on: ${VIP_NODE}"
-    else
-        fail "Primary virtual IP resource ${RSC_IP} is not reported as Started"
-    fi
-
-    if [[ -n "$AZURE_LB_NODE" ]]; then
-        pass "Azure Load Balancer probe resource is running on: ${AZURE_LB_NODE}"
-    else
-        fail "Azure Load Balancer probe resource ${RSC_AZURE_LB} is not reported as Started"
-    fi
-
-    if [[ -n "$PRIMARY_NODES" && "$VIP_NODE" == "$PRIMARY_NODES" ]]; then
-        pass "Primary virtual IP is aligned with the primary HANA controller"
-    else
-        fail "Primary virtual IP node '${VIP_NODE:-none}' does not match the primary HANA controller node '${PRIMARY_NODES:-none}'"
-    fi
-
-    if [[ -n "$PRIMARY_NODES" && "$AZURE_LB_NODE" == "$PRIMARY_NODES" ]]; then
-        pass "Azure Load Balancer probe is aligned with the primary HANA controller"
-    else
-        fail "Azure Load Balancer probe node '${AZURE_LB_NODE:-none}' does not match the primary HANA controller node '${PRIMARY_NODES:-none}'"
-    fi
-
-    if command_exists SAPHanaSR-showAttr; then
-        if SAPHanaSR-showAttr >/tmp/saphanasr_showattr.$$ 2>&1; then
-            pass "SAPHanaSR-showAttr completed successfully"
-            sed 's/^/INFO  SAPHanaSR: /' /tmp/saphanasr_showattr.$$ | head -n 80
+        if [[ "$actual_value" == "$expected_value" ]]; then
+            pass "Azure Fence Agent ${parameter_name}=${expected_value}"
         else
-            warn "SAPHanaSR-showAttr could not retrieve HANA SR cluster attributes"
+            warn "Azure Fence Agent ${parameter_name} is '${actual_value:-unset}', while Microsoft guidance uses ${expected_value}"
         fi
+    done
 
-        rm -f /tmp/saphanasr_showattr.$$
+    if grep -qE 'op monitor interval=3600s?[[:space:]]+timeout=120s?' <<< "$FENCE_CFG"; then
+        pass "Azure Fence Agent monitor operation uses interval=3600 and timeout=120"
     else
-        warn "SAPHanaSR-showAttr command was not found in PATH"
+        warn "Could not confirm Azure Fence Agent monitor interval=3600 timeout=120"
+    fi
+done
+
+# ===========================================================================
+# Optional Azure Scheduled Events validation
+# ===========================================================================
+printf '\n--- Azure Scheduled Events integration ---\n'
+
+HEALTH_EVENT_RESOURCE="health-azure-events"
+HEALTH_EVENT_CLONE="health-azure-events-cln"
+HEALTH_LOCATION="loc_azure_health"
+
+HEALTH_EVENT_CFG="$(crm_object_block "$HEALTH_EVENT_RESOURCE")"
+HEALTH_EVENT_CLONE_CFG="$(crm_object_block "$HEALTH_EVENT_CLONE")"
+HEALTH_LOCATION_CFG="$(crm_object_block "$HEALTH_LOCATION")"
+
+if [[ -z "$HEALTH_EVENT_CFG" ]]; then
+    info "Azure Scheduled Events resource is not configured; health-azure validation is skipped"
+else
+    pass "Azure Scheduled Events resource is configured: ${HEALTH_EVENT_RESOURCE}"
+
+    NODE_HEALTH_STRATEGY="$(get_cluster_property node-health-strategy || true)"
+
+    if [[ "$NODE_HEALTH_STRATEGY" == "custom" ]]; then
+        pass "Cluster property node-health-strategy=custom"
+    else
+        fail "Azure Scheduled Events requires node-health-strategy=custom; current value: '${NODE_HEALTH_STRATEGY:-unset}'"
     fi
 
-    rm -f /tmp/crm_mon_resources.$$
+    if grep -qE "^primitive[[:space:]]+${HEALTH_EVENT_RESOURCE}[[:space:]]+(ocf:heartbeat:)?azure-events-az" <<< "$HEALTH_EVENT_CFG"; then
+        pass "health-azure-events uses azure-events-az resource agent"
+    else
+        fail "health-azure-events is not configured with azure-events-az"
+    fi
+
+    if grep -qE "^clone[[:space:]]+${HEALTH_EVENT_CLONE}[[:space:]]+${HEALTH_EVENT_RESOURCE}" <<< "$HEALTH_EVENT_CLONE_CFG"; then
+        pass "Azure Scheduled Events clone is configured"
+    else
+        fail "Azure Scheduled Events clone is missing"
+    fi
+
+    if grep -q 'allow-unhealthy-nodes=true' <<< "$HEALTH_EVENT_CLONE_CFG"; then
+        pass "Azure Scheduled Events clone allows unhealthy nodes"
+    else
+        warn "Could not confirm allow-unhealthy-nodes=true for Azure Scheduled Events clone"
+    fi
+
+    if grep -q "#health-azure" <<< "$HEALTH_LOCATION_CFG"; then
+        pass "Azure health location constraint is configured"
+    else
+        fail "Azure health location constraint ${HEALTH_LOCATION} is missing or invalid"
+    fi
+
+    if [[ -n "${MANAGED_IDENTITY_INFO:-}" ]]; then
+        pass "azure-events-az has an available local Managed Identity"
+    else
+        fail "azure-events-az is configured but local Managed Identity validation failed"
+    fi
 fi
+
+# ===========================================================================
+# Runtime status validation
+# ===========================================================================
+printf '\n--- Runtime status ---\n'
+
+if crm_mon -1 -r >/tmp/crm_mon_resources.$$ 2>&1; then
+    pass "Pacemaker runtime resource status is queryable"
+else
+    fail "Unable to read runtime resource status with 'crm_mon -1 -r'"
+    : >/tmp/crm_mon_resources.$$
+fi
+
+if grep -q "Failed Resource Actions:" /tmp/crm_mon_resources.$$ ||
+   grep -q "Failed Actions:" /tmp/crm_mon_resources.$$; then
+    fail "Pacemaker reports failed resource actions"
+else
+    pass "Pacemaker reports no failed resource actions"
+fi
+
+for fence_resource in "${AZURE_FENCE_RESOURCES[@]}"; do
+    FENCE_RUNTIME_NODE="$(
+        awk -v resource="$fence_resource" '
+            index($0, resource) && $0 ~ /Started/ {
+                print $NF
+                exit
+            }
+        ' /tmp/crm_mon_resources.$$
+    )"
+
+    if [[ -n "$FENCE_RUNTIME_NODE" ]]; then
+        pass "Azure Fence Agent resource is Started on: ${FENCE_RUNTIME_NODE}"
+    else
+        warn "Azure Fence Agent resource ${fence_resource} is not reported as Started"
+    fi
+done
 
 rm -f \
     /tmp/cib.$$ \
-    /tmp/crm_config.$$
+    /tmp/crm_config.$$ \
+    /tmp/crm_mon_resources.$$
 
 printf '\n============================================================\n'
 printf 'Preflight summary for %s\n' "$HOST"
@@ -850,10 +662,13 @@ printf 'Warnings:           %s\n' "$WARNINGS"
 printf '============================================================\n'
 
 if [[ "$FAILURES" -gt 0 ]]; then
-    printf 'RESULT: NOT READY — correct all FAIL items before proceeding.\n'
+    printf '%sRESULT: NOT READY — correct all FAIL items before proceeding.%s\n' \
+        "$COLOR_RED" "$COLOR_RESET"
     exit 1
 fi
 
-printf 'RESULT: READY — no mandatory prerequisite failures were found.\n'
-printf 'Review WARN items before proceeding.\n'
+printf '%sRESULT: READY — no mandatory prerequisite failures were found.%s\n' \
+    "$COLOR_GREEN" "$COLOR_RESET"
+printf '%sReview WARN items before proceeding.%s\n' \
+    "$COLOR_YELLOW" "$COLOR_RESET"
 exit 0
